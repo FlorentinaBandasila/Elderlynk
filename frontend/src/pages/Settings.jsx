@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useContext } from 'react'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import TopBar from '@/components/layout/TopBar'
+import { DarkModeContext } from '@/App'
 
 function Toggle({ checked, onChange }) {
   return (
@@ -19,6 +19,8 @@ function Toggle({ checked, onChange }) {
 }
 
 export default function Settings() {
+  const { darkMode, setDarkMode } = useContext(DarkModeContext)
+
   const [profile, setProfile] = useState({
     name: 'Dr. Sarah Chen', email: 'sarah.chen@sunrisecare.org',
     role: 'Attending Physician', facility: 'Sunrise Care Center',
@@ -58,17 +60,19 @@ export default function Settings() {
   )
 
   return (
-    <div>
-      <TopBar title="Settings" subtitle="Manage your account and preferences" />
-      <div className="p-6 space-y-6 max-w-2xl">
+    <div className="p-6 space-y-6 max-w-2xl">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-800">Setari</h1>
+        <p className="text-slate-500 mt-1">Gestionare cont și preferințe</p>
+      </div>
 
-        <Section title="Profile">
+        <Section title="Profil">
           <div className="grid grid-cols-2 gap-4">
             {[
-              { label: 'Full Name', key: 'name' },
+              { label: 'Nume Complet', key: 'name' },
               { label: 'Email', key: 'email' },
-              { label: 'Role', key: 'role' },
-              { label: 'Facility', key: 'facility' },
+              { label: 'Rol', key: 'role' },
+              { label: 'Facilitati', key: 'facility' },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-xs font-medium text-slate-500 mb-1">{f.label}</label>
@@ -81,59 +85,59 @@ export default function Settings() {
             ))}
           </div>
           <div className="flex justify-end">
-            <Button size="sm">Save Profile</Button>
+            <Button size="sm">Salveaza Profil</Button>
           </div>
         </Section>
 
-        <Section title="Alert Preferences">
-          <ToggleRow label="Critical Alarms" desc="Receive alerts for critical severity alarms"
+        <Section title="Preferinte Alerte">
+          <ToggleRow label="Alarme Critice" desc="Primiti alerte pentru alarme de severitate critica"
             checked={alerts.criticalAlarms} onChange={v => setAlerts(p => ({ ...p, criticalAlarms: v }))} />
-          <ToggleRow label="High Alarms" desc="Receive alerts for high severity alarms"
+          <ToggleRow label="Alarme Înalte" desc="Primiti alerte pentru alarme de severitate înalta"
             checked={alerts.highAlarms} onChange={v => setAlerts(p => ({ ...p, highAlarms: v }))} />
-          <ToggleRow label="Medium Alarms" desc="Receive alerts for medium severity alarms"
+          <ToggleRow label="Alarme Medii" desc="Primiti alerte pentru alarme de severitate medie"
             checked={alerts.mediumAlarms} onChange={v => setAlerts(p => ({ ...p, mediumAlarms: v }))} />
-          <ToggleRow label="Sensor Offline" desc="Alert when a sensor goes offline"
+          <ToggleRow label="Senzor Offline" desc="Alerta cand un senzor se deconecteaza"
             checked={alerts.sensorOffline} onChange={v => setAlerts(p => ({ ...p, sensorOffline: v }))} />
-          <ToggleRow label="Battery Low" desc="Alert when sensor battery drops below 20%"
+          <ToggleRow label="Baterie Scazuta" desc="Alerta cand bateria senzorului scade sub 20%"
             checked={alerts.batteryLow} onChange={v => setAlerts(p => ({ ...p, batteryLow: v }))} />
         </Section>
 
-        <Section title="Delivery Channels">
-          <ToggleRow label="Email Notifications" checked={delivery.emailNotifications}
+        <Section title="Canale Livrare">
+          <ToggleRow label="Notificari Email" checked={delivery.emailNotifications}
             onChange={v => setDelivery(p => ({ ...p, emailNotifications: v }))} />
-          <ToggleRow label="Push Notifications" checked={delivery.pushNotifications}
+          <ToggleRow label="Notificari Push" checked={delivery.pushNotifications}
             onChange={v => setDelivery(p => ({ ...p, pushNotifications: v }))} />
-          <ToggleRow label="SMS Alerts" desc="Critical alarms only"
+          <ToggleRow label="Alerte SMS" desc="Numai alarme critice"
             checked={delivery.smsAlerts} onChange={v => setDelivery(p => ({ ...p, smsAlerts: v }))} />
         </Section>
 
-        <Section title="Display Preferences">
-          <ToggleRow label="Compact Mode" desc="Reduce card padding and spacing"
+        <Section title="Preferinte Afisare">
+          <ToggleRow label="Mod Compact" desc="Reduceti padding si spatiu cartilor"
             checked={display.compactMode} onChange={v => setDisplay(p => ({ ...p, compactMode: v }))} />
-          <ToggleRow label="Vital Warnings" desc="Highlight abnormal vital signs in red"
+          <ToggleRow label="Avertismente Vitale" desc="Evidentiati semnele vitale anormale in rosu"
             checked={display.showVitalWarnings} onChange={v => setDisplay(p => ({ ...p, showVitalWarnings: v }))} />
-          <ToggleRow label="Auto Refresh" desc="Refresh alarm and sensor data every 30s"
+          <ToggleRow label="Reîncarcacare Automata" desc="Reîncarcacare alarme si date senzori la 30s"
             checked={display.autoRefresh} onChange={v => setDisplay(p => ({ ...p, autoRefresh: v }))} />
+          <ToggleRow label="Mod Întunecat" desc="Activeaza tema întunecata pentru ochi mai comozi"
+            checked={darkMode} onChange={setDarkMode} />
         </Section>
 
-        <Section title="Security">
+        <Section title="Securitate">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">Change Password</div>
-              <div className="text-xs text-slate-400 mt-0.5">Last changed 90 days ago</div>
+              <div className="text-sm font-medium text-slate-700">Schimbati Parola</div>
+              <div className="text-xs text-slate-400 mt-0.5">Ultima schimbare acum 90 de zile</div>
             </div>
-            <Button variant="outline" size="sm">Change</Button>
+            <Button variant="outline" size="sm">Schimbati</Button>
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-slate-700">Two-Factor Authentication</div>
-              <div className="text-xs text-slate-400 mt-0.5">Add an extra layer of security</div>
+              <div className="text-sm font-medium text-slate-700">Autentificare Doi Factori</div>
+              <div className="text-xs text-slate-400 mt-0.5">Adaugati un strat suplimentar de securitate</div>
             </div>
-            <Button variant="outline" size="sm">Enable</Button>
+            <Button variant="outline" size="sm">Activati</Button>
           </div>
         </Section>
-
-      </div>
     </div>
   )
 }

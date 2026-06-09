@@ -1,0 +1,21 @@
+# Claude Code
+.claude/
+.claude-code/
+
+# Copilot
+.copilot/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.bak
+*.tmp
+*.pid

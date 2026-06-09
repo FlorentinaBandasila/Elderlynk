@@ -3,7 +3,6 @@ import { Bell, AlertTriangle, Stethoscope, Monitor, CheckCheck, X } from 'lucide
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import TopBar from '@/components/layout/TopBar'
 import { notifications as initialNotifs } from '@/data/mock'
 
 const typeIcon = {
@@ -14,7 +13,7 @@ const typeIcon = {
 
 const priorityVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'gray' }
 
-const typeFilters = ['All', 'alarm', 'consultation', 'system']
+const typeFilters = ['Toate', 'alarmă', 'consultație', 'sistem']
 
 export default function Notifications() {
   const [notifs, setNotifs]   = useState(initialNotifs)
@@ -33,9 +32,11 @@ export default function Notifications() {
   })
 
   return (
-    <div>
-      <TopBar title="Notifications" subtitle={`${unread} unread`} />
-      <div className="p-6 space-y-5">
+    <div className="p-6 space-y-5">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-800">Notificări</h1>
+        <p className="text-slate-500 mt-1">{unread} notificare necitit{unread !== 1 ? 'ă' : 'ă'}</p>
+      </div>
 
         {/* Header actions */}
         <div className="flex items-center justify-between flex-wrap gap-3">
@@ -52,7 +53,7 @@ export default function Notifications() {
           </div>
           {unread > 0 && (
             <Button variant="outline" size="sm" onClick={markAllRead}>
-              <CheckCheck size={14} /> Mark all read
+              <CheckCheck size={14} /> Marchează toate ca citite
             </Button>
           )}
         </div>
@@ -60,13 +61,13 @@ export default function Notifications() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-slate-800">All Notifications</h2>
+              <h2 className="font-semibold text-slate-800">Toate Notificările</h2>
               <Badge variant="blue">{notifs.length} total</Badge>
             </div>
           </CardHeader>
           <div className="divide-y divide-slate-50">
             {filtered.length === 0 && (
-              <div className="text-center py-10 text-slate-400 text-sm">No notifications.</div>
+              <div className="text-center py-10 text-slate-400 text-sm">Nicio notificare.</div>
             )}
             {filtered.map(n => (
               <div
@@ -103,7 +104,6 @@ export default function Notifications() {
             ))}
           </div>
         </Card>
-      </div>
     </div>
   )
 }

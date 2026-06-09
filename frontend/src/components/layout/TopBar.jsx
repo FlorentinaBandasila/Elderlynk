@@ -17,7 +17,7 @@ export default function TopBar({ title, subtitle, action }) {
         <Search size={14} className="text-slate-400" />
         <input
           className="bg-transparent text-sm text-slate-600 placeholder-slate-400 outline-none w-full"
-          placeholder="Search..."
+          placeholder="Căutați..."
         />
       </div>
       <span className="hidden lg:block text-sm text-slate-400">{now}</span>

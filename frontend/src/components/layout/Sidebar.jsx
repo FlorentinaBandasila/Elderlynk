@@ -1,99 +1,169 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Stethoscope, Radio,
-  Bell, BellRing, Settings,
+  Bell, BellRing, Settings, ChevronLeft, ChevronRight, Activity,
 } from 'lucide-react'
 import { notifications, alarms } from '@/data/mock'
 
-const nav = [
-  { to: '/',               icon: LayoutDashboard, label: 'Dashboard',    end: true },
-  { to: '/patients',       icon: Users,            label: 'Patients' },
-  { to: '/consultations',  icon: Stethoscope,      label: 'Consultations' },
-  { to: '/sensor-config',  icon: Radio,            label: 'Sensor Config' },
-  { to: '/live-alarms',    icon: Bell,             label: 'Live Alarms' },
-  { to: '/notifications',  icon: BellRing,         label: 'Notifications' },
-  { to: '/settings',       icon: Settings,         label: 'Settings' },
+const navGroups = [
+  {
+    label: 'Principal',
+    items: [
+      { to: '/',            icon: LayoutDashboard, label: 'Tablou Bord',    end: true },
+      { to: '/patients',    icon: Users,            label: 'Pacienți' },
+      { to: '/live-alarms', icon: Bell,             label: 'Alarme Live' },
+    ],
+  },
+  {
+    label: 'Clinică',
+    items: [
+      { to: '/consultations', icon: Stethoscope, label: 'Consultații' },
+      { to: '/sensor-config', icon: Radio,        label: 'Config Senzori' },
+    ],
+  },
+  {
+    label: 'General',
+    items: [
+      { to: '/notifications', icon: BellRing, label: 'Notificări' },
+      { to: '/settings',      icon: Settings,  label: 'Setări' },
+    ],
+  },
 ]
 
 const unreadNotif  = notifications.filter(n => !n.read).length
 const activeAlarms = alarms.filter(a => a.status === 'Active').length
 
-const sidebarBg = {
-  background: 'linear-gradient(180deg, #071d35 0%, #0a3560 40%, #0f4c81 100%)',
-}
-
-export default function Sidebar() {
+export default function Sidebar({ collapsed, onToggle }) {
   return (
     <aside
-      className="fixed left-0 top-0 h-screen w-64 flex flex-col z-30 select-none"
-      style={sidebarBg}
+      className="fixed left-0 top-0 h-screen flex flex-col z-30 select-none overflow-hidden transition-all duration-300 bg-white border-r border-slate-200"
+      style={{ width: collapsed ? '64px' : '240px' }}
     >
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#00b4d8' }}>
-            <span className="text-white font-bold text-lg">E</span>
-          </div>
-          <div>
-            <div className="text-white font-bold text-lg leading-tight">Elderlynk</div>
-            <div className="text-white/50 text-xs">Telecare Platform</div>
-          </div>
+      {/* Logo + toggle */}
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-slate-100 min-h-[68px]">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: '#00b4d8' }}
+        >
+          <Activity size={16} color="#fff" />
         </div>
-      </div>
-
-      {/* Facility */}
-      <div className="px-5 py-3 border-b border-white/10">
-        <div className="text-white/40 text-xs uppercase tracking-wider mb-1">Facility</div>
-        <div className="text-white/80 text-sm font-medium">Sunrise Care Center</div>
-        <div className="text-white/40 text-xs">Ward A · Floor 2–4</div>
+        {!collapsed && (
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-slate-800 text-sm leading-tight">Elderlynk</div>
+            <div className="text-slate-400 text-xs uppercase tracking-wider">Platform de Teleconcultare</div>
+          </div>
+        )}
+        {!collapsed && (
+          <button
+            onClick={onToggle}
+            className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors flex-shrink-0"
+          >
+            <ChevronLeft size={15} />
+          </button>
+        )}
+        {collapsed && (
+          <button
+            onClick={onToggle}
+            className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors mx-auto"
+          >
+            <ChevronRight size={15} />
+          </button>
+        )}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-3 overflow-y-auto">
-        {nav.map(({ to, icon: Icon, label, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 transition-all text-sm font-medium ${
-                isActive
-                  ? 'bg-white/15 text-white border-l-2 border-[#00b4d8] pl-[10px]'
-                  : 'text-white/60 hover:text-white/90 hover:bg-white/8'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon size={18} style={{ color: isActive ? '#00b4d8' : undefined }} />
-                <span className="flex-1">{label}</span>
-                {label === 'Live Alarms' && activeAlarms > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#e63946', color: '#fff' }}>
-                    {activeAlarms}
-                  </span>
-                )}
-                {label === 'Notifications' && unreadNotif > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#e63946', color: '#fff' }}>
-                    {unreadNotif}
-                  </span>
-                )}
-              </>
+      <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
+        {navGroups.map(group => (
+          <div key={group.label} className="mb-4">
+            {!collapsed && (
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest px-3 mb-1.5">
+                {group.label}
+              </div>
             )}
-          </NavLink>
+            {collapsed && <div className="my-2 border-t border-slate-100" />}
+            {group.items.map(({ to, icon: Icon, label, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                title={collapsed ? label : undefined}
+                className={({ isActive }) =>
+                  `relative flex items-center rounded-lg mb-0.5 transition-all text-sm font-medium
+                  ${collapsed ? 'justify-center px-0 py-2.5 gap-0' : 'px-3 py-2 gap-3'}
+                  ${isActive
+                    ? 'text-[#0f4c81] font-semibold'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`
+                }
+                style={({ isActive }) => isActive ? { backgroundColor: '#eff6ff' } : {}}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      size={18}
+                      className="flex-shrink-0"
+                      style={{ color: isActive ? '#0f4c81' : undefined }}
+                    />
+                    {!collapsed && <span className="flex-1 truncate">{label}</span>}
+                    {!collapsed && label === 'Live Alarms' && activeAlarms > 0 && (
+                      <span
+                        className="px-1.5 py-0.5 rounded-full text-xs font-bold text-white"
+                        style={{ backgroundColor: '#0f4c81' }}
+                      >
+                        {activeAlarms}
+                      </span>
+                    )}
+                    {!collapsed && label === 'Notifications' && unreadNotif > 0 && (
+                      <span
+                        className="px-1.5 py-0.5 rounded-full text-xs font-bold text-white"
+                        style={{ backgroundColor: '#0f4c81' }}
+                      >
+                        {unreadNotif}
+                      </span>
+                    )}
+                    {collapsed && (
+                      (label === 'Live Alarms' && activeAlarms > 0) ||
+                      (label === 'Notifications' && unreadNotif > 0)
+                    ) && (
+                      <span
+                        className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
+                        style={{ backgroundColor: '#e63946' }}
+                      />
+                    )}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
 
       {/* User strip */}
-      <div className="px-4 py-4 border-t border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold" style={{ backgroundColor: '#00b4d8', color: '#fff' }}>
-            SC
+      <div className="border-t border-slate-100 px-3 py-3">
+        {collapsed ? (
+          <div className="flex justify-center">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+              style={{ backgroundColor: '#00b4d8' }}
+            >
+              AR
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-white text-sm font-medium truncate">Dr. Sarah Chen</div>
-            <div className="text-white/50 text-xs">Attending Physician</div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+              style={{ backgroundColor: '#00b4d8' }}
+            >
+              AR
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-slate-700 truncate">Alin Rogojan</div>
+              <div className="text-xs text-slate-400 truncate">alinrogojan1144@gmail.com</div>
+            </div>
+            <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />
           </div>
-        </div>
+        )}
       </div>
     </aside>
   )

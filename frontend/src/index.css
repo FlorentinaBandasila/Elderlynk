@@ -9,13 +9,78 @@
 
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 15px;
     background-color: #eef2f7;
     color: #1e293b;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s, color 0.3s;
   }
 
   #root {
     min-height: 100vh;
+  }
+
+  :root.dark-mode body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+  }
+
+  :root.dark-mode {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  :root.dark-mode .bg-slate-100 {
+    background-color: #1e293b;
+  }
+
+  :root.dark-mode .bg-white {
+    background-color: #1e293b;
+  }
+
+  :root.dark-mode .bg-slate-50 {
+    background-color: #1a1f35;
+  }
+
+  :root.dark-mode .text-slate-800 {
+    color: #e2e8f0;
+  }
+
+  :root.dark-mode .text-slate-700 {
+    color: #cbd5e1;
+  }
+
+  :root.dark-mode .text-slate-600 {
+    color: #94a3b8;
+  }
+
+  :root.dark-mode .text-slate-500 {
+    color: #64748b;
+  }
+
+  :root.dark-mode .text-slate-400 {
+    color: #475569;
+  }
+
+  :root.dark-mode .border-slate-200 {
+    border-color: #334155;
+  }
+
+  :root.dark-mode .border-slate-300 {
+    border-color: #475569;
+  }
+
+  :root.dark-mode .shadow {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  }
+
+  :root.dark-mode .shadow-sm {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  }
+
+  :root.dark-mode .divide-slate-200 > * + * {
+    border-color: #334155;
   }
 }
