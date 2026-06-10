@@ -10,12 +10,12 @@ namespace Elderlynk.Web
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<Patient> Patients { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Entity configuration
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasKey(e => e.UserId);
@@ -41,6 +41,36 @@ namespace Elderlynk.Web
                     .HasColumnName("Data_Creare");
                 entity.Property(e => e.Active)
                     .HasColumnName("Activ");
+            });
+
+            modelBuilder.Entity<Patient>(entity =>
+            {
+                entity.HasKey(e => e.PatientId);
+                entity.Property(e => e.PatientId)
+                    .HasColumnName("ID_Pacient");
+                entity.Property(e => e.CNP)
+                    .IsRequired()
+                    .HasMaxLength(13)
+                    .HasColumnName("CNP");
+                entity.Property(e => e.Age)
+                    .HasColumnName("Varsta");
+                entity.Property(e => e.Street)
+                    .HasMaxLength(100)
+                    .HasColumnName("Adresa_Strada");
+                entity.Property(e => e.City)
+                    .HasMaxLength(50)
+                    .HasColumnName("Adresa_Oras");
+                entity.Property(e => e.County)
+                    .HasMaxLength(50)
+                    .HasColumnName("Adresa_Judet");
+                entity.Property(e => e.Profession)
+                    .HasMaxLength(50)
+                    .HasColumnName("Profesie");
+                entity.Property(e => e.WorkPlace)
+                    .HasMaxLength(50)
+                    .HasColumnName("Loc_Munca");
+                entity.Property(e => e.FamilyDoctorId)
+                    .HasColumnName("ID_Medic_Familie");
             });
         }
     }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, ChevronDown, ChevronRight, Heart, Wind, Thermometer, AlertTriangle, Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -14,10 +14,48 @@ const activeAlarms = alarms.filter(a => a.status === 'Active')
 export default function Patients() {
   const navigate = useNavigate()
   const [patients, setPatients]   = useState(initialPatients)
+  const [loading, setLoading] = useState(false)
   const [search, setSearch]       = useState('')
   const [riskFilter, setRisk]     = useState('All')
   const [expanded, setExpanded]   = useState(null)
   const [showDialog, setShowDialog] = useState(false)
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch('/api/patients')
+        const data = await response.json()
+
+        const transformedPatients = data.map((p, index) => ({
+          id: `p${p.patientId}`,
+          name: `${p.street || 'Pacient'} ${index}`,
+          age: p.age || 0,
+          gender: 'N/A',
+          room: `${p.city || 'N/A'} (${p.county || 'N/A'})`,
+          phone: '',
+          email: '',
+          physician: '',
+          diagnoses: [p.profession || 'N/A'],
+          allergies: [],
+          risk: 'Medium',
+          vitals: { hr: 75, bp: '120/80', spo2: 97, temp: 36.8 },
+          sensors: [],
+          status: 'Admitted',
+          cnp: p.cnp
+        }))
+
+        setPatients(transformedPatients)
+      } catch (error) {
+        console.error('Error fetching patients:', error)
+        setPatients(initialPatients)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPatients()
+  }, [])
   const [formData, setFormData] = useState({
     name: '',
     age: '',
