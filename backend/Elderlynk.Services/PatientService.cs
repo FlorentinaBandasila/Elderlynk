@@ -21,14 +21,14 @@ namespace Elderlynk.Services
             return patients.Select(p => new PatientResponseDto
             {
                 PatientId = p.PatientId,
+                UserId = p.UserId,
                 CNP = p.CNP,
                 Age = p.Age,
                 Street = p.Street,
                 City = p.City,
                 County = p.County,
                 Profession = p.Profession,
-                WorkPlace = p.WorkPlace,
-                FamilyDoctorId = p.FamilyDoctorId
+                WorkPlace = p.WorkPlace
             });
         }
 
@@ -50,8 +50,7 @@ namespace Elderlynk.Services
                 City = patient.City,
                 County = patient.County,
                 Profession = patient.Profession,
-                WorkPlace = patient.WorkPlace,
-                FamilyDoctorId = patient.FamilyDoctorId
+                WorkPlace = patient.WorkPlace
             };
         }
     }

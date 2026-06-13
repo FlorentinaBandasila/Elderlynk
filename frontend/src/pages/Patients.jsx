@@ -6,6 +6,8 @@ import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { patients as initialPatients, alarms } from '@/data/mock'
+import { patientAPI } from '@/services/api'
+import { mapPatientFromAPI, mapPatientToAPI } from '@/services/mappers'
 
 const riskVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'green' }
 const risks = ['Toate', 'Critic', 'Înalt', 'Mediu', 'Mic']
@@ -16,7 +18,7 @@ export default function Patients() {
   const [patients, setPatients]   = useState(initialPatients)
   const [loading, setLoading] = useState(false)
   const [search, setSearch]       = useState('')
-  const [riskFilter, setRisk]     = useState('All')
+  const [riskFilter, setRisk]     = useState('Toate')
   const [expanded, setExpanded]   = useState(null)
   const [showDialog, setShowDialog] = useState(false)
 
@@ -24,31 +26,19 @@ export default function Patients() {
     const fetchPatients = async () => {
       setLoading(true)
       try {
-        const response = await fetch('/api/patients')
-        const data = await response.json()
+        const response = await patientAPI.getAll()
+        console.log('API Response:', response)
 
-        const transformedPatients = data.map((p, index) => ({
-          id: `p${p.patientId}`,
-          name: `${p.street || 'Pacient'} ${index}`,
-          age: p.age || 0,
-          gender: 'N/A',
-          room: `${p.city || 'N/A'} (${p.county || 'N/A'})`,
-          phone: '',
-          email: '',
-          physician: '',
-          diagnoses: [p.profession || 'N/A'],
-          allergies: [],
-          risk: 'Medium',
-          vitals: { hr: 75, bp: '120/80', spo2: 97, temp: 36.8 },
-          sensors: [],
-          status: 'Admitted',
-          cnp: p.cnp
-        }))
+        // Use API data directly, don't fall back to mock data
+        const transformedPatients = response && response.length > 0
+          ? response.map((p, index) => mapPatientFromAPI(p, index))
+          : []
 
+        console.log('Transformed Patients:', transformedPatients)
         setPatients(transformedPatients)
       } catch (error) {
         console.error('Error fetching patients:', error)
-        setPatients(initialPatients)
+        setPatients([]) // Show empty, not mock data
       } finally {
         setLoading(false)
       }
@@ -72,7 +62,9 @@ export default function Patients() {
   const filtered = patients.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.room.toLowerCase().includes(search.toLowerCase())
-    const matchRisk = riskFilter === 'All' || p.risk === riskFilter
+    const riskMap = { 'Toate': 'All', 'Critic': 'Critical', 'Înalt': 'High', 'Mediu': 'Medium', 'Mic': 'Low' }
+    const mappedRisk = riskMap[riskFilter] || riskFilter
+    const matchRisk = mappedRisk === 'All' || p.risk === mappedRisk
     return matchSearch && matchRisk
   })
 
@@ -83,43 +75,44 @@ export default function Patients() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleAddPatient = () => {
+  const handleAddPatient = async () => {
     if (!formData.name || !formData.age || !formData.room) {
       alert('Vă rugăm completați câmpurile obligatorii: Nume, Vârstă, Cameră')
       return
     }
 
-    const newPatient = {
-      id: `p${patients.length + 1}`,
-      name: formData.name,
-      age: parseInt(formData.age),
-      gender: formData.gender,
-      room: formData.room,
-      phone: formData.phone,
-      email: formData.email,
-      physician: formData.physician,
-      diagnoses: formData.diagnoses ? formData.diagnoses.split(',').map(d => d.trim()) : [],
-      allergies: formData.allergies ? formData.allergies.split(',').map(a => a.trim()) : [],
-      risk: formData.risk,
-      vitals: { hr: 75, bp: '120/80', spo2: 97, temp: 36.8 },
-      sensors: [],
-      status: 'Admitted',
-    }
+    try {
+      const newPatientData = {
+        cnp: formData.cnp || Math.random().toString().slice(2, 15),
+        age: parseInt(formData.age),
+        adresa_Strada: formData.name,
+        adresa_Oras: formData.room,
+        adresa_Judet: formData.room,
+        profesie: formData.profession || '',
+        loc_Munca: formData.workplace || '',
+      }
 
-    setPatients(prev => [...prev, newPatient])
-    setShowDialog(false)
-    setFormData({
-      name: '',
-      age: '',
-      gender: 'Female',
-      room: '',
-      phone: '',
-      email: '',
-      physician: '',
-      diagnoses: '',
-      allergies: '',
-      risk: 'Low'
-    })
+      const response = await patientAPI.create(newPatientData)
+      const newPatient = mapPatientFromAPI(response)
+
+      setPatients(prev => [...prev, newPatient])
+      setShowDialog(false)
+      setFormData({
+        name: '',
+        age: '',
+        gender: 'Female',
+        room: '',
+        phone: '',
+        email: '',
+        physician: '',
+        diagnoses: '',
+        allergies: '',
+        risk: 'Low'
+      })
+    } catch (error) {
+      console.error('Error creating patient:', error)
+      alert('Eroare la crearea pacientului')
+    }
   }
 
   return (

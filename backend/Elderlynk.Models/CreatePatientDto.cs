@@ -1,8 +1,7 @@
 namespace Elderlynk.Models
 {
-    public class PatientResponseDto
+    public class CreatePatientDto
     {
-        public int PatientId { get; set; }
         public int? UserId { get; set; }
         public string CNP { get; set; } = null!;
         public int? Age { get; set; }

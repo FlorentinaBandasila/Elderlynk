@@ -10,6 +10,9 @@ namespace Elderlynk.Models
         [Column("ID_Pacient")]
         public int PatientId { get; set; }
 
+        [Column("ID_Utilizator")]
+        public int? UserId { get; set; }
+
         [Column("CNP")]
         public string CNP { get; set; } = null!;
 
@@ -30,8 +33,5 @@ namespace Elderlynk.Models
 
         [Column("Loc_Munca")]
         public string? WorkPlace { get; set; }
-
-        [Column("ID_Medic_Familie")]
-        public int? FamilyDoctorId { get; set; }
     }
 }

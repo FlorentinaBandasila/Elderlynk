@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import {
   ArrowLeft, Heart, Wind, Thermometer, Activity,
   User, Stethoscope, Bell, Settings2, Clock, Pencil,
@@ -7,6 +8,8 @@ import { Card, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
 import { patients, consultations, sensors } from '@/data/mock'
+import { patientAPI } from '@/services/api'
+import { mapPatientFromAPI } from '@/services/mappers'
 
 const consultVariant = { Scheduled: 'blue', 'In Progress': 'cyan', Completed: 'green', Cancelled: 'gray' }
 
@@ -23,7 +26,7 @@ const activityByPatient = {
 function getActivity(id, patient) {
   if (activityByPatient[id]) return activityByPatient[id]
   return [
-    { icon: Stethoscope, title: 'Consultation completed', desc: 'Routine follow-up visit',      by: patient.physician, time: '14:00' },
+    { icon: Stethoscope, title: 'Consultation completed', desc: 'Routine follow-up visit',      by: patient.physician || 'Unknown', time: '14:00' },
     { icon: User,        title: 'Vitals recorded',        desc: 'All vitals within normal range', by: 'Nursing staff',   time: '09:00' },
   ]
 }
@@ -36,7 +39,34 @@ const activityIconColor = {
 export default function PatientDetail() {
   const { id }   = useParams()
   const navigate = useNavigate()
-  const patient  = patients.find(p => p.id === id)
+  const [patient, setPatient] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const fetchPatient = async () => {
+      try {
+        setLoading(true)
+        const patientId = parseInt(id.replace('p', ''))
+        const response = await patientAPI.getById(patientId)
+        const transformedPatient = mapPatientFromAPI(response)
+        setPatient(transformedPatient)
+      } catch (err) {
+        console.error('Error fetching patient:', err)
+        setError(err.message)
+        const fallback = patients.find(p => p.id === id)
+        setPatient(fallback)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchPatient()
+  }, [id])
+
+  if (loading) return (
+    <div className="p-10 text-center text-slate-500">Loading...</div>
+  )
 
   if (!patient) return (
     <div className="p-10 text-center text-slate-500">Pacientul nu a fost găsit.</div>
