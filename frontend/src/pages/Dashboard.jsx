@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Users, AlertTriangle, Radio, Clock,
@@ -8,12 +8,15 @@ import { Card, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
 import { patients, alarms, sensors } from '@/data/mock'
+import { patientAPI, alarmAPI, sensorConfigAPI } from '@/services/api'
+import { mapPatientFromAPI, mapAlarmFromAPI, mapSensorConfigFromAPI } from '@/services/mappers'
 
 const severityVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'gray' }
 
-const allActive    = alarms.filter(a => a.status === 'Active')
-const criticalAlarm = allActive.find(a => a.severity === 'Critical')
-const offlineSensors = sensors.filter(s => s.status === 'Offline')
+// Use mock data as fallback
+let allActive = alarms.filter(a => a.status === 'Active')
+let criticalAlarm = allActive.find(a => a.severity === 'Critical')
+let offlineSensors = sensors.filter(s => s.status === 'Offline')
 
 const fmt = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
@@ -21,6 +24,50 @@ const fmt = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute:
 export default function Dashboard() {
   const navigate = useNavigate()
   const [resolvedIds, setResolvedIds] = useState([])
+  const [apiAlarms, setApiAlarms] = useState([])
+  const [apiPatients, setApiPatients] = useState([])
+  const [apiSensors, setApiSensors] = useState([])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [patientsRes, alarmsRes, sensorsRes] = await Promise.all([
+          patientAPI.getAll().catch(() => []),
+          alarmAPI.getAll().catch(() => []),
+          sensorConfigAPI.getAll().catch(() => []),
+        ])
+
+        console.log('Dashboard - Patients API Response:', patientsRes)
+        console.log('Dashboard - Alarms API Response:', alarmsRes)
+        console.log('Dashboard - Sensors API Response:', sensorsRes)
+
+        if (patientsRes && patientsRes.length > 0) {
+          const mappedPatients = patientsRes.map((p, i) => mapPatientFromAPI(p, i))
+          console.log('Dashboard - Mapped Patients:', mappedPatients)
+          setApiPatients(mappedPatients)
+        }
+        if (alarmsRes && alarmsRes.length > 0) {
+          const mappedAlarms = alarmsRes.map(mapAlarmFromAPI)
+          console.log('Dashboard - Mapped Alarms:', mappedAlarms)
+          setApiAlarms(mappedAlarms)
+        }
+        if (sensorsRes && sensorsRes.length > 0) {
+          const mappedSensors = sensorsRes.map(mapSensorConfigFromAPI)
+          console.log('Dashboard - Mapped Sensors:', mappedSensors)
+          setApiSensors(mappedSensors)
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  // Update references for computed values
+  allActive = apiAlarms.filter(a => a.status === 'Active')
+  criticalAlarm = allActive.find(a => a.severity === 'Critical')
+  offlineSensors = apiSensors.filter(s => s.status === 'Offline')
 
   const resolve  = id => setResolvedIds(p => [...p, id])
   const pending  = allActive.filter(a => !resolvedIds.includes(a.id))
@@ -29,7 +76,7 @@ export default function Dashboard() {
   const stats = [
     {
       label: 'Pacienți Activi',
-      value: patients.filter(p => p.status === 'Admitted').length,
+      value: apiPatients.filter(p => p.status === 'Admitted').length,
       subColor: '#64748b',
       icon: Users,
       iconColor: '#0f4c81',
@@ -64,7 +111,7 @@ export default function Dashboard() {
   const systemStats = [
     {
       label: 'Alarme',
-      value: alarms.length,
+      value: apiAlarms.length,
       unit: 'evenimente',
       icon: Bell,
       iconColor: '#e63946',
@@ -85,7 +132,7 @@ export default function Dashboard() {
     },
     {
       label: 'Cazuri Critice',
-      value: patients.filter(p => p.risk === 'Critical').length,
+      value: apiPatients.filter(p => p.risk === 'Critical').length,
       unit: 'activ',
       icon: AlertTriangle,
       iconColor: '#d97706',
@@ -188,7 +235,7 @@ export default function Dashboard() {
                 </button>
               </div>
               <div className="flex gap-6 flex-wrap">
-                {patients.slice(0, 6).map(p => (
+                {apiPatients.slice(0, 6).map(p => (
                   <button
                     key={p.id}
                     onClick={() => navigate(`/patients/${p.id}`)}
@@ -239,7 +286,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {alarms.map(a => (
+                  {apiAlarms.map(a => (
                     <tr key={a.id} className="border-b border-slate-50 hover:bg-slate-50">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">

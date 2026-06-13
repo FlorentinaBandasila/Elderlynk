@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Bell, AlertTriangle, Stethoscope, Monitor, CheckCheck, X } from 'lucide-react'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { notifications as initialNotifs } from '@/data/mock'
+import { alarmAPI, auditLogAPI } from '@/services/api'
+import { mapAlarmFromAPI } from '@/services/mappers'
 
 const typeIcon = {
   alarm:        <AlertTriangle size={16} style={{ color: '#e63946' }} />,
@@ -18,6 +20,29 @@ const typeFilters = ['Toate', 'alarmă', 'consultație', 'sistem']
 export default function Notifications() {
   const [notifs, setNotifs]   = useState(initialNotifs)
   const [typeFilter, setType] = useState('All')
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const alarmsRes = await alarmAPI.getAll().catch(() => [])
+        if (alarmsRes && alarmsRes.length > 0) {
+          const alarmNotifs = alarmsRes.map((alarm, idx) => ({
+            id: `a${idx}`,
+            type: 'alarm',
+            priority: alarm.alarmType === 'Critical' ? 'Critical' : 'High',
+            title: alarm.alarmType || 'Alarm',
+            message: alarm.message,
+            timestamp: alarm.triggerDate,
+            read: alarm.isResolved,
+          }))
+          setNotifs(alarmNotifs.length > 0 ? alarmNotifs : initialNotifs)
+        }
+      } catch (error) {
+        console.error('Error fetching notifications:', error)
+      }
+    }
+    fetchNotifications()
+  }, [])
 
   const unread = notifs.filter(n => !n.read).length
 
