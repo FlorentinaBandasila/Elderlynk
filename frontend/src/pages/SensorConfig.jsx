@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Wifi, WifiOff, AlertCircle, Settings2 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { sensors as initialSensors } from '@/data/mock'
+import { sensorConfigAPI } from '@/services/api'
+import { mapSensorConfigFromAPI } from '@/services/mappers'
 
 function StatusPill({ status }) {
   const cfg = {
@@ -22,8 +24,6 @@ function StatusPill({ status }) {
   )
 }
 
-const patientNames = ['All', ...Array.from(new Set(initialSensors.map(s => s.patientName)))]
-
 export default function SensorConfig() {
   const [sensors, setSensors]       = useState(initialSensors)
   const [editSensor, setEditSensor] = useState(null)
@@ -31,6 +31,23 @@ export default function SensorConfig() {
   const [search, setSearch]         = useState('')
   const [patientFilter, setPatient] = useState('All')
   const [statusFilter, setStatus]   = useState('All')
+
+  useEffect(() => {
+    const fetchSensors = async () => {
+      try {
+        const response = await sensorConfigAPI.getAll()
+        if (response && response.length > 0) {
+          const transformed = response.map(mapSensorConfigFromAPI)
+          setSensors(transformed)
+        }
+      } catch (error) {
+        console.error('Error fetching sensors:', error)
+      }
+    }
+    fetchSensors()
+  }, [])
+
+  const patientNames = ['All', ...Array.from(new Set(sensors.map(s => s.patientName || 'Unknown')))]
 
   const counts = {
     total:    sensors.length,
