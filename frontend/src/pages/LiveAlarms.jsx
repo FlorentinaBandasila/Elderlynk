@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Avatar from '@/components/ui/Avatar'
 import { alarms as initialAlarms } from '@/data/mock'
+import { alarmAPI } from '@/services/api'
+import { mapAlarmFromAPI, mapAlarmToAPI } from '@/services/mappers'
 
 const severityVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'gray' }
 const statusVariant   = { Active: 'red', Acknowledged: 'yellow', Resolved: 'green' }
@@ -13,8 +15,30 @@ const statuses   = ['Toate', 'Activ', 'Recunoscut', 'Rezolvat']
 
 export default function LiveAlarms() {
   const [alarms, setAlarms]         = useState(initialAlarms)
-  const [severityFilter, setSev]    = useState('All')
-  const [statusFilter,   setStatus] = useState('All')
+  const [severityFilter, setSev]    = useState('Toate')
+  const [statusFilter,   setStatus] = useState('Toate')
+
+  useEffect(() => {
+    const fetchAlarms = async () => {
+      try {
+        const response = await alarmAPI.getAll()
+        console.log('Alarms API Response:', response)
+
+        // Use API data directly
+        const transformedAlarms = response && response.length > 0
+          ? response.map(mapAlarmFromAPI)
+          : []
+
+        console.log('Transformed Alarms:', transformedAlarms)
+        setAlarms(transformedAlarms)
+      } catch (error) {
+        console.error('Error fetching alarms:', error)
+        setAlarms([]) // Show empty, not mock data
+      }
+    }
+
+    fetchAlarms()
+  }, [])
 
   const counts = {
     active:       alarms.filter(a => a.status === 'Active').length,
@@ -23,14 +47,40 @@ export default function LiveAlarms() {
     resolved:     alarms.filter(a => a.status === 'Resolved').length,
   }
 
+  const severityMap = { 'Toate': 'All', 'Critic': 'Critical', 'Înalt': 'High', 'Mediu': 'Medium', 'Mic': 'Low' }
+  const statusMap = { 'Toate': 'All', 'Activ': 'Active', 'Recunoscut': 'Acknowledged', 'Rezolvat': 'Resolved' }
+
   const filtered = alarms.filter(a => {
-    const matchSev    = severityFilter === 'All' || a.severity === severityFilter
-    const matchStatus = statusFilter   === 'All' || a.status   === statusFilter
+    const mappedSev = severityMap[severityFilter] || severityFilter
+    const mappedStatus = statusMap[statusFilter] || statusFilter
+    const matchSev    = mappedSev === 'All' || a.severity === mappedSev
+    const matchStatus = mappedStatus === 'All' || a.status === mappedStatus
     return matchSev && matchStatus
   })
 
-  const acknowledge = id => setAlarms(prev => prev.map(a => a.id === id ? { ...a, status: 'Acknowledged' } : a))
-  const resolve     = id => setAlarms(prev => prev.map(a => a.id === id ? { ...a, status: 'Resolved' }     : a))
+  const acknowledge = async (id) => {
+    const alarm = alarms.find(a => a.id === id)
+    if (alarm) {
+      try {
+        await alarmAPI.update(alarm.alarmId, { isResolved: false })
+        setAlarms(prev => prev.map(a => a.id === id ? { ...a, status: 'Acknowledged' } : a))
+      } catch (error) {
+        console.error('Error acknowledging alarm:', error)
+      }
+    }
+  }
+
+  const resolve = async (id) => {
+    const alarm = alarms.find(a => a.id === id)
+    if (alarm) {
+      try {
+        await alarmAPI.update(alarm.alarmId, { isResolved: true })
+        setAlarms(prev => prev.map(a => a.id === id ? { ...a, status: 'Resolved' } : a))
+      } catch (error) {
+        console.error('Error resolving alarm:', error)
+      }
+    }
+  }
 
   const fmt = ts => new Date(ts).toLocaleString('en-US', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
