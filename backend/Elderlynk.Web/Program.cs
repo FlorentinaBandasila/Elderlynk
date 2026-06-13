@@ -11,6 +11,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPatientService, PatientService>();
+builder.Services.AddScoped<IAlarmService, AlarmService>();
+builder.Services.AddScoped<IConsultationService, ConsultationService>();
+builder.Services.AddScoped<IDeviceService, DeviceService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<ISensorMeasurementService, SensorMeasurementService>();
+builder.Services.AddScoped<IHL7MessageService, HL7MessageService>();
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<IRoleService, RoleService>();
+builder.Services.AddScoped<ISensorConfigService, SensorConfigService>();
+builder.Services.AddScoped<IUserRoleService, UserRoleService>();
+// builder.Services.AddScoped<IDoctorService, DoctorService>();
+// builder.Services.AddScoped<ISupervisorService, SupervisorService>();
+// Note: Doctor and Supervisor services disabled - tables not in existing schema
 builder.Services.AddControllers();
 builder.Services.AddSwaggerGen();
 

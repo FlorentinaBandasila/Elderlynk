@@ -11,6 +11,19 @@ namespace Elderlynk.Web
 
         public DbSet<User> Users { get; set; }
         public DbSet<Patient> Patients { get; set; }
+        public DbSet<Alarm> Alarms { get; set; }
+        public DbSet<Consultation> Consultations { get; set; }
+        public DbSet<Device> Devices { get; set; }
+        public DbSet<AuditLog> AuditLogs { get; set; }
+        public DbSet<SensorMeasurement> SensorMeasurements { get; set; }
+        public DbSet<HL7Message> HL7Messages { get; set; }
+        public DbSet<Recommendation> Recommendations { get; set; }
+        public DbSet<Role> Roles { get; set; }
+        public DbSet<SensorConfig> SensorConfigs { get; set; }
+        public DbSet<UserRole> UserRoles { get; set; }
+        // public DbSet<Doctor> Doctors { get; set; }
+        // public DbSet<Supervisor> Supervisors { get; set; }
+        // Note: Doctor and Supervisor tables not in existing schema
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -69,8 +82,11 @@ namespace Elderlynk.Web
                 entity.Property(e => e.WorkPlace)
                     .HasMaxLength(50)
                     .HasColumnName("Loc_Munca");
-                entity.Property(e => e.FamilyDoctorId)
-                    .HasColumnName("ID_Medic_Familie");
+            });
+
+            modelBuilder.Entity<UserRole>(entity =>
+            {
+                entity.HasKey(e => new { e.UserId, e.RoleId });
             });
         }
     }
