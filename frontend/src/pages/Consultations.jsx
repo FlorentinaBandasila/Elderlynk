@@ -1,40 +1,89 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Calendar, Clock, Video, MapPin, Plus, X } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { consultations as initialConsults, patients } from '@/data/mock'
+import { consultationAPI, patientAPI } from '@/services/api'
+import { mapConsultationFromAPI, mapConsultationToAPI } from '@/services/mappers'
 
-const today = '2026-05-06'
+const today = new Date().toISOString().split('T')[0]
 
 export default function Consultations() {
-  const [consults, setConsults] = useState(initialConsults)
+  const [consults, setConsults] = useState([])
+  const [patients, setPatients] = useState([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedConsult, setSelectedConsult] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [form, setForm] = useState({
     patientId: '', type: '', date: today, time: '09:00',
-    mode: 'În Persoană', priority: 'Obișnuit', physician: 'Dr. Sarah Chen', notes: '',
+    mode: 'In-Person', priority: 'Routine', physician: 'Dr. Sarah Chen', notes: '',
   })
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [consultsRes, patientsRes] = await Promise.all([
+          consultationAPI.getAll().catch(() => []),
+          patientAPI.getAll().catch(() => []),
+        ])
+
+        console.log('Consultations API Response:', consultsRes)
+        console.log('Patients API Response:', patientsRes)
+
+        // Use API data directly, no mock fallback
+        const transformedConsults = consultsRes && consultsRes.length > 0
+          ? consultsRes.map(mapConsultationFromAPI)
+          : []
+
+        setConsults(transformedConsults)
+        setPatients(patientsRes || [])
+      } catch (error) {
+        console.error('Error fetching data:', error)
+        setConsults([])
+        setPatients([])
+      }
+    }
+
+    fetchData()
+  }, [])
 
   const itemsPerPage = 6
   const totalPages = Math.ceil(consults.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedConsults = consults.slice(startIndex, startIndex + itemsPerPage)
 
-  const handleCreate = () => {
-    const patient = patients.find(p => p.id === form.patientId)
-    if (!patient || !form.type) return
-    const newConsult = {
-      id: `c${Date.now()}`,
-      patientName: patient.name,
-      ...form,
-      status: 'Scheduled',
+  const handleCreate = async () => {
+    if (!form.patientId || !form.type) {
+      alert('Please select a patient and consultation type')
+      return
     }
-    setConsults(prev => [newConsult, ...prev])
-    setDialogOpen(false)
-    setForm({ patientId: '', type: '', date: today, time: '09:00', mode: 'În Persoană', priority: 'Obișnuit', physician: 'Dr. Sarah Chen', notes: '' })
+
+    try {
+      const patient = patients.find(p => p.patientId === parseInt(form.patientId))
+      const consultationData = {
+        patientId: parseInt(form.patientId),
+        doctorId: null,
+        presentationReason: form.type,
+        symptoms: form.notes || '',
+        diagnosisCode: '',
+        notes: form.notes || '',
+      }
+
+      const response = await consultationAPI.create(consultationData)
+      const newConsult = mapConsultationFromAPI(response)
+      if (patient) {
+        newConsult.patientName = `Patient ${patient.patientId}`
+      }
+
+      setConsults(prev => [newConsult, ...prev])
+      setDialogOpen(false)
+      setForm({ patientId: '', type: '', date: today, time: '09:00', mode: 'In-Person', priority: 'Routine', physician: 'Dr. Sarah Chen', notes: '' })
+    } catch (error) {
+      console.error('Error creating consultation:', error)
+      alert('Error creating consultation')
+    }
   }
 
   const updateStatus = (id, status) => {
