@@ -5,6 +5,7 @@ namespace Elderlynk.Models
         public int SensorId { get; set; }
         public int? DeviceId { get; set; }
         public int? OrderNumber { get; set; }
+        public string? Name { get; set; }
         public string? SensorType { get; set; }
         public string? MeasurementUnit { get; set; }
         public int? SamplingPeriodSeconds { get; set; }

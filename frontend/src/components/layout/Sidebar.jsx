@@ -18,7 +18,7 @@ const navGroups = [
     label: 'Clinică',
     items: [
       { to: '/consultations', icon: Stethoscope, label: 'Consultații' },
-      { to: '/sensor-config', icon: Radio,        label: 'Config Senzori' },
+      { to: '/sensor-config', icon: Radio,        label: 'Senzori' },
     ],
   },
   {
@@ -93,9 +93,9 @@ export default function Sidebar({ collapsed, onToggle }) {
                   ${isActive
                     ? 'text-[#0f4c81] font-semibold'
                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                  }`
+                  }
+                  ${isActive ? 'bg-[#eff6ff]' : ''}`
                 }
-                style={({ isActive }) => isActive ? { backgroundColor: '#eff6ff' } : {}}
               >
                 {({ isActive }) => (
                   <>

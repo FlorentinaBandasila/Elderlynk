@@ -158,6 +158,7 @@ export const mapConsultationFromAPI = (apiConsultation) => {
     presentationReason: apiConsultation.presentationReason || '',
     symptoms: apiConsultation.symptoms || '',
     diagnosisCode: apiConsultation.diagnosisCode || apiConsultation.Diagnostic_Cod_ICD9 || '',
+    doctorId: apiConsultation.doctorId || null,
   }
 }
 
@@ -172,13 +173,11 @@ export const mapConsultationToAPI = (consultation) => ({
 
 // Map API Device response to frontend format
 export const mapDeviceFromAPI = (apiDevice) => {
-  const patientName = [apiDevice.firstName, apiDevice.lastName].filter(Boolean).join(' ') || 'Unknown Patient'
-
   return {
     id: `d${apiDevice.deviceId}`,
     deviceId: apiDevice.deviceId,
-    patientId: `p${apiDevice.patientId}` || '',
-    patientName,
+    patientId: `p${apiDevice.patientId}`,
+    patientName: 'Unknown Patient',
     room: '---',
     type: 'IoT Device',
     model: apiDevice.firmwareVersion ? `ESP32 v${apiDevice.firmwareVersion}` : 'ESP32',
@@ -216,12 +215,11 @@ export const mapSensorMeasurementToAPI = (measurement) => ({
 
 // Map API SensorConfig response to frontend format
 export const mapSensorConfigFromAPI = (apiConfig) => {
-  const patientName = [apiConfig.firstName, apiConfig.lastName].filter(Boolean).join(' ') || 'Unknown'
-
   return {
     id: `s${apiConfig.sensorId}`,
     sensorId: apiConfig.sensorId,
     deviceId: apiConfig.deviceId,
+    name: apiConfig.name || apiConfig.sensorType || 'Unknown',
     type: apiConfig.sensorType || 'Unknown',
     status: apiConfig.active ? 'Online' : 'Offline',
     sensorType: apiConfig.sensorType || '',
@@ -236,12 +234,13 @@ export const mapSensorConfigFromAPI = (apiConfig) => {
     thresholdMin: apiConfig.lowerAlarmThreshold || 0,
     thresholdMax: apiConfig.upperAlarmThreshold || 100,
     active: apiConfig.active,
-    patientName,
+    patientName: 'Unknown',
     room: '---',
     location: `Device ${apiConfig.deviceId}`,
-    model: `Sensor Type: ${apiConfig.sensorType}`,
-    battery: 85,
-}
+    model: apiConfig.sensorType || 'Unknown Sensor',
+    lastValue: '---',
+    unit: apiConfig.measurementUnit || '',
+  }
 }
 
 export const mapSensorConfigToAPI = (config) => ({

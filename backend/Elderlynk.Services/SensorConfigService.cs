@@ -23,6 +23,7 @@ namespace Elderlynk.Services
                 SensorId = c.SensorId,
                 DeviceId = c.DeviceId,
                 OrderNumber = c.OrderNumber,
+                Name = c.Name,
                 SensorType = c.SensorType,
                 MeasurementUnit = c.MeasurementUnit,
                 SamplingPeriodSeconds = c.SamplingPeriodSeconds,
@@ -49,6 +50,7 @@ namespace Elderlynk.Services
                 SensorId = config.SensorId,
                 DeviceId = config.DeviceId,
                 OrderNumber = config.OrderNumber,
+                Name = config.Name,
                 SensorType = config.SensorType,
                 MeasurementUnit = config.MeasurementUnit,
                 SamplingPeriodSeconds = config.SamplingPeriodSeconds,
@@ -67,6 +69,7 @@ namespace Elderlynk.Services
             {
                 DeviceId = dto.DeviceId,
                 OrderNumber = dto.OrderNumber,
+                Name = dto.Name,
                 SensorType = dto.SensorType,
                 MeasurementUnit = dto.MeasurementUnit,
                 SamplingPeriodSeconds = dto.SamplingPeriodSeconds ?? 600,
@@ -86,6 +89,7 @@ namespace Elderlynk.Services
                 SensorId = config.SensorId,
                 DeviceId = config.DeviceId,
                 OrderNumber = config.OrderNumber,
+                Name = config.Name,
                 SensorType = config.SensorType,
                 MeasurementUnit = config.MeasurementUnit,
                 SamplingPeriodSeconds = config.SamplingPeriodSeconds,
@@ -110,6 +114,8 @@ namespace Elderlynk.Services
                 config.DeviceId = dto.DeviceId;
             if (dto.OrderNumber.HasValue)
                 config.OrderNumber = dto.OrderNumber;
+            if (dto.Name != null)
+                config.Name = dto.Name;
             if (dto.SensorType != null)
                 config.SensorType = dto.SensorType;
             if (dto.MeasurementUnit != null)

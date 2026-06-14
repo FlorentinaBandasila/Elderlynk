@@ -16,6 +16,10 @@ namespace Elderlynk.Models
         [Column("Nr_Ordine")]
         public int? OrderNumber { get; set; }
 
+        [Column("Nume_Senzor")]
+        [MaxLength(100)]
+        public string? Name { get; set; }
+
         [Column("Tip_Senzor")]
         [MaxLength(50)]
         public string? SensorType { get; set; }

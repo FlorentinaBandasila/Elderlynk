@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Search, Wifi, WifiOff, AlertCircle, Settings2 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { sensors as initialSensors } from '@/data/mock'
 import { sensorConfigAPI } from '@/services/api'
-import { mapSensorConfigFromAPI } from '@/services/mappers'
+import { mapSensorConfigFromAPI, mapSensorConfigToAPI } from '@/services/mappers'
 
 function StatusPill({ status }) {
   const cfg = {
@@ -30,9 +30,13 @@ export default function SensorConfig() {
   const [form, setForm]             = useState({})
   const [search, setSearch]         = useState('')
   const [patientFilter, setPatient] = useState('All')
-  const [statusFilter, setStatus]   = useState('All')
+  const [statusFilter, setStatus]   = useState('Online')
+  const effectRan = useRef(false)
 
   useEffect(() => {
+    if (effectRan.current) return
+    effectRan.current = true
+
     const fetchSensors = async () => {
       try {
         const response = await sensorConfigAPI.getAll()
@@ -53,15 +57,14 @@ export default function SensorConfig() {
     total:    sensors.length,
     Online:   sensors.filter(s => s.status === 'Online').length,
     Offline:  sensors.filter(s => s.status === 'Offline').length,
-    Disabled: sensors.filter(s => s.status === 'Disabled').length,
   }
 
   const filtered = sensors.filter(s => {
-    const matchSearch  = s.type.toLowerCase().includes(search.toLowerCase()) ||
-      s.patientName.toLowerCase().includes(search.toLowerCase()) ||
-      s.room.toLowerCase().includes(search.toLowerCase())
+    const matchSearch  = (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.type || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.patientName || '').toLowerCase().includes(search.toLowerCase())
     const matchPatient = patientFilter === 'All' || s.patientName === patientFilter
-    const matchStatus  = statusFilter  === 'All' || s.status      === statusFilter
+    const matchStatus  = s.status === statusFilter
     return matchSearch && matchPatient && matchStatus
   })
 
@@ -70,9 +73,28 @@ export default function SensorConfig() {
     setForm({ status: s.status, sampleRate: s.sampleRate, thresholdMin: s.thresholdMin, thresholdMax: s.thresholdMax, location: s.location })
   }
 
-  const saveEdit = () => {
-    setSensors(prev => prev.map(s => s.id === editSensor.id ? { ...s, ...form } : s))
-    setEditSensor(null)
+  const saveEdit = async () => {
+    try {
+      const sensorId = editSensor.sensorId
+      const updateData = {
+        deviceId: editSensor.deviceId,
+        orderNumber: editSensor.orderNumber,
+        sensorType: editSensor.sensorType,
+        measurementUnit: editSensor.measurementUnit,
+        samplingPeriodSeconds: form.sampleRate || editSensor.samplingPeriodSeconds,
+        scaleFactor: editSensor.scaleFactor,
+        lowerAlarmThreshold: form.thresholdMin,
+        upperAlarmThreshold: form.thresholdMax,
+        active: form.status === 'Online',
+      }
+
+      await sensorConfigAPI.update(sensorId, updateData)
+
+      setSensors(prev => prev.map(s => s.id === editSensor.id ? { ...s, ...form } : s))
+      setEditSensor(null)
+    } catch (error) {
+      console.error('Error updating sensor:', error)
+    }
   }
 
   return (
@@ -90,12 +112,11 @@ export default function SensorConfig() {
           { label: 'Total Senzori', value: counts.total,    icon: Settings2, iconColor: '#0f4c81', iconBg: '#dbeafe', status: null },
           { label: 'Online',        value: counts.Online,   icon: Wifi,      iconColor: '#0369a1', iconBg: '#e0f2fe', status: 'Online' },
           { label: 'Offline',       value: counts.Offline,  icon: WifiOff,   iconColor: '#dc2626', iconBg: '#fee2e2', status: 'Offline' },
-          { label: 'Dezactivat',      value: counts.Disabled, icon: AlertCircle, iconColor: '#94a3b8', iconBg: '#f1f5f9', status: 'Disabled' },
         ].map(s => (
           <Card
             key={s.label}
             className="cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setStatus(statusFilter === s.status ? 'All' : (s.status || 'All'))}
+            onClick={() => s.status && setStatus(s.status)}
             style={statusFilter === s.status && s.status ? { borderColor: s.iconColor } : {}}
           >
             <CardBody className="flex items-start justify-between py-5">
@@ -117,24 +138,20 @@ export default function SensorConfig() {
           <Search size={15} className="text-slate-400 flex-shrink-0" />
           <input
             className="bg-transparent text-sm text-slate-700 placeholder-slate-400 outline-none w-full"
-            placeholder="Cautati senzor, pacient sau camera..."
+            placeholder="Cautati senzor, pacient"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
         <select
-          value={patientFilter}
-          onChange={e => setPatient(e.target.value)}
-          className="bg-white border border-slate-200 text-slate-600 text-sm rounded-xl px-4 py-2.5 outline-none cursor-pointer"
-        >
-          {patientNames.map(n => <option key={n}>{n}</option>)}
-        </select>
-        <select
           value={statusFilter}
           onChange={e => setStatus(e.target.value)}
           className="bg-white border border-slate-200 text-slate-600 text-sm rounded-xl px-4 py-2.5 outline-none cursor-pointer"
         >
-          {['Toti senzorii', 'Online', 'Offline', 'Dezactivat'].map(s => <option key={s}>{s}</option>)}
+          {[
+            { value: 'Online', label: 'Online' },
+            { value: 'Offline', label: 'Offline' },
+          ].map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </div>
 
@@ -152,10 +169,7 @@ export default function SensorConfig() {
               {/* Name + status */}
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-bold text-slate-800 text-base">{s.type}</div>
-                  <div className="text-sm text-slate-400 mt-0.5 truncate">
-                    {s.patientName} · Camera {s.room}
-                  </div>
+                  <div className="font-bold text-slate-800 text-base">{s.name}</div>
                 </div>
                 <StatusPill status={s.status} />
               </div>
@@ -221,7 +235,7 @@ export default function SensorConfig() {
             className="text-sm rounded-xl px-4 py-2.5"
             style={{ backgroundColor: '#f8fafc', color: '#64748b' }}
           >
-            {editSensor?.patientName} · Room {editSensor?.room} · {editSensor?.model}
+            {editSensor?.patientName} · {editSensor?.model}
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>
