@@ -29,6 +29,15 @@ namespace Elderlynk.Models
         [MaxLength(10)]
         public string? DiagnosisCode { get; set; }
 
+        [Column("Diagnostic_Text")]
+        public string? DiagnosticText { get; set; }
+
+        [Column("Trimiteri")]
+        public string? Referrals { get; set; }
+
+        [Column("Retete_Generate")]
+        public string? GeneratedPrescriptions { get; set; }
+
         [Column("Observatii")]
         public string? Notes { get; set; }
     }

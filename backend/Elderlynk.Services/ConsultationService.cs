@@ -27,6 +27,9 @@ namespace Elderlynk.Services
                 PresentationReason = c.PresentationReason,
                 Symptoms = c.Symptoms,
                 DiagnosisCode = c.DiagnosisCode,
+                DiagnosticText = c.DiagnosticText,
+                Referrals = c.Referrals,
+                GeneratedPrescriptions = c.GeneratedPrescriptions,
                 Notes = c.Notes
             });
         }
@@ -49,6 +52,9 @@ namespace Elderlynk.Services
                 PresentationReason = consultation.PresentationReason,
                 Symptoms = consultation.Symptoms,
                 DiagnosisCode = consultation.DiagnosisCode,
+                DiagnosticText = consultation.DiagnosticText,
+                Referrals = consultation.Referrals,
+                GeneratedPrescriptions = consultation.GeneratedPrescriptions,
                 Notes = consultation.Notes
             };
         }
@@ -59,10 +65,13 @@ namespace Elderlynk.Services
             {
                 PatientId = dto.PatientId,
                 DoctorId = dto.DoctorId,
-                ConsultationDate = DateTime.Now,
+                ConsultationDate = dto.ConsultationDate ?? DateTime.Now,
                 PresentationReason = dto.PresentationReason,
                 Symptoms = dto.Symptoms,
                 DiagnosisCode = dto.DiagnosisCode,
+                DiagnosticText = dto.DiagnosticText,
+                Referrals = dto.Referrals,
+                GeneratedPrescriptions = dto.GeneratedPrescriptions,
                 Notes = dto.Notes
             };
 
@@ -78,6 +87,9 @@ namespace Elderlynk.Services
                 PresentationReason = consultation.PresentationReason,
                 Symptoms = consultation.Symptoms,
                 DiagnosisCode = consultation.DiagnosisCode,
+                DiagnosticText = consultation.DiagnosticText,
+                Referrals = consultation.Referrals,
+                GeneratedPrescriptions = consultation.GeneratedPrescriptions,
                 Notes = consultation.Notes
             };
         }
@@ -94,12 +106,20 @@ namespace Elderlynk.Services
                 consultation.PatientId = dto.PatientId;
             if (dto.DoctorId.HasValue)
                 consultation.DoctorId = dto.DoctorId;
+            if (dto.ConsultationDate.HasValue)
+                consultation.ConsultationDate = dto.ConsultationDate;
             if (dto.PresentationReason != null)
                 consultation.PresentationReason = dto.PresentationReason;
             if (dto.Symptoms != null)
                 consultation.Symptoms = dto.Symptoms;
             if (dto.DiagnosisCode != null)
                 consultation.DiagnosisCode = dto.DiagnosisCode;
+            if (dto.DiagnosticText != null)
+                consultation.DiagnosticText = dto.DiagnosticText;
+            if (dto.Referrals != null)
+                consultation.Referrals = dto.Referrals;
+            if (dto.GeneratedPrescriptions != null)
+                consultation.GeneratedPrescriptions = dto.GeneratedPrescriptions;
             if (dto.Notes != null)
                 consultation.Notes = dto.Notes;
 

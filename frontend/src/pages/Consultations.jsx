@@ -17,8 +17,8 @@ export default function Consultations() {
   const [selectedConsult, setSelectedConsult] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [form, setForm] = useState({
-    patientId: '', type: '', date: today, time: '09:00',
-    mode: 'In-Person', priority: 'Routine', physician: 'Dr. Sarah Chen', notes: '',
+    patientId: '', presentationReason: '', symptoms: '', diagnosisCode: '', diagnosticText: '', referrals: '', generatedPrescriptions: '', notes: '',
+    date: today, time: '09:00',
   })
 
   const effectRan = useRef(false)
@@ -54,7 +54,7 @@ export default function Consultations() {
                 mapped.patientName = patientNameMap[patientId]
               }
               return mapped
-            })
+            }).sort((a, b) => new Date(b.date) - new Date(a.date))
           : []
 
         setConsults(transformedConsults)
@@ -75,34 +75,43 @@ export default function Consultations() {
   const paginatedConsults = consults.slice(startIndex, startIndex + itemsPerPage)
 
   const handleCreate = async () => {
-    if (!form.patientId || !form.type) {
-      alert('Please select a patient and consultation type')
+    if (!form.patientId || !form.presentationReason) {
+      alert('Please select a patient and presentation reason')
       return
     }
 
     try {
-      const patient = patients.find(p => p.patientId === parseInt(form.patientId))
+      const consultationDate = `${form.date}T${form.time}:00.000Z`
       const consultationData = {
         patientId: parseInt(form.patientId),
-        doctorId: null,
-        presentationReason: form.type,
-        symptoms: form.notes || '',
-        diagnosisCode: '',
+        doctorId: 1,
+        consultationDate,
+        presentationReason: form.presentationReason,
+        symptoms: form.symptoms || '',
+        diagnosisCode: form.diagnosisCode || '',
+        diagnosticText: form.diagnosticText || '',
+        referrals: form.referrals || '',
+        generatedPrescriptions: form.generatedPrescriptions || '',
         notes: form.notes || '',
       }
 
       const response = await consultationAPI.create(consultationData)
       const newConsult = mapConsultationFromAPI(response)
+
+      // Map patient name from the patients list
+      const patient = patients.find(p => (p.patientId || p.id) === parseInt(form.patientId))
       if (patient) {
-        newConsult.patientName = `Patient ${patient.patientId}`
+        const firstName = patient.firstName || patient.name?.split(' ')[0] || ''
+        const lastName = patient.lastName || patient.name?.split(' ')[1] || ''
+        newConsult.patientName = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Patient'
       }
 
       setConsults(prev => [newConsult, ...prev])
       setDialogOpen(false)
-      setForm({ patientId: '', type: '', date: today, time: '09:00', mode: 'In-Person', priority: 'Routine', physician: 'Dr. Sarah Chen', notes: '' })
+      setForm({ patientId: '', presentationReason: '', symptoms: '', diagnosisCode: '', diagnosticText: '', referrals: '', generatedPrescriptions: '', notes: '', date: today, time: '09:00' })
     } catch (error) {
       console.error('Error creating consultation:', error)
-      alert('Error creating consultation')
+      alert(`Error creating consultation: ${error.message}`)
     }
   }
 
@@ -128,9 +137,10 @@ export default function Consultations() {
 
         <div className="space-y-2">
           {paginatedConsults.map(c => (
-          <Card key={c.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedConsult(c)}>
-            <CardBody>
-              <div className="flex items-start gap-4">
+          <div key={c.id} className="cursor-pointer" onClick={() => { console.log('Clicked consultation:', c); setSelectedConsult(c); }}>
+            <Card className="hover:shadow-md transition-shadow">
+              <CardBody>
+                <div className="flex items-start gap-4">
                 <Avatar name={c.patientName} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2 justify-between">
@@ -150,7 +160,8 @@ export default function Consultations() {
                 </div>
               </div>
             </CardBody>
-          </Card>
+            </Card>
+          </div>
           ))}
           {consults.length === 0 && (
             <div className="text-center py-10 text-slate-400 text-sm">Nu sunt consultatii înregistrate.</div>
@@ -196,7 +207,7 @@ export default function Consultations() {
 
       {/* Details Modal */}
       {selectedConsult && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSelectedConsult(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]" onClick={() => setSelectedConsult(null)}>
           <Card className="w-full max-w-md" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between p-6 border-b border-slate-200">
               <h2 className="text-lg font-semibold text-slate-800">Detalii Consultatie</h2>
@@ -210,9 +221,15 @@ export default function Consultations() {
                 <p className="text-slate-800 font-semibold mt-1">{selectedConsult.patientName}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium uppercase">Tip Consultatie</p>
-                <p className="text-slate-800 mt-1">{selectedConsult.type}</p>
+                <p className="text-xs text-slate-500 font-medium uppercase">Motiv Prezentare</p>
+                <p className="text-slate-800 mt-1">{selectedConsult.presentationReason || selectedConsult.type || '-'}</p>
               </div>
+              {selectedConsult.symptoms && (
+                <div>
+                  <p className="text-xs text-slate-500 font-medium uppercase">Simptome</p>
+                  <p className="text-slate-700 mt-1 text-sm">{selectedConsult.symptoms}</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-slate-500 font-medium uppercase">Data</p>
@@ -223,45 +240,37 @@ export default function Consultations() {
                   <p className="text-slate-800 mt-1">{selectedConsult.time}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              {selectedConsult.diagnosisCode && (
                 <div>
-                  <p className="text-xs text-slate-500 font-medium uppercase">Mod</p>
-                  <p className="text-slate-800 mt-1">{selectedConsult.mode}</p>
+                  <p className="text-xs text-slate-500 font-medium uppercase">Cod Diagnostic</p>
+                  <p className="text-slate-800 mt-1">{selectedConsult.diagnosisCode}</p>
                 </div>
+              )}
+              {selectedConsult.diagnosticText && (
                 <div>
-                  <p className="text-xs text-slate-500 font-medium uppercase">Physician</p>
-                  <p className="text-slate-800 mt-1">{selectedConsult.physician}</p>
+                  <p className="text-xs text-slate-500 font-medium uppercase">Text Diagnostic</p>
+                  <p className="text-slate-700 mt-1 text-sm">{selectedConsult.diagnosticText}</p>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              )}
+              {selectedConsult.referrals && (
                 <div>
-                  <p className="text-xs text-slate-500 font-medium uppercase">Prioritate</p>
-                  <p className="text-slate-800 mt-1">{selectedConsult.priority}</p>
+                  <p className="text-xs text-slate-500 font-medium uppercase">Trimiteri</p>
+                  <p className="text-slate-700 mt-1 text-sm">{selectedConsult.referrals}</p>
                 </div>
+              )}
+              {selectedConsult.generatedPrescriptions && (
                 <div>
-                  <p className="text-xs text-slate-500 font-medium uppercase">Stare</p>
-                  <p className="text-slate-800 mt-1">{selectedConsult.status}</p>
+                  <p className="text-xs text-slate-500 font-medium uppercase">Retete Generate</p>
+                  <p className="text-slate-700 mt-1 text-sm">{selectedConsult.generatedPrescriptions}</p>
                 </div>
-              </div>
+              )}
               {selectedConsult.notes && (
                 <div>
-                  <p className="text-xs text-slate-500 font-medium uppercase">Note</p>
+                  <p className="text-xs text-slate-500 font-medium uppercase">Observatii</p>
                   <p className="text-slate-700 mt-1 text-sm">{selectedConsult.notes}</p>
                 </div>
               )}
             </CardBody>
-            <div className="border-t border-slate-200 p-6 flex gap-2">
-              <Button variant="ghost" onClick={() => setSelectedConsult(null)} className="flex-1">Inchide</Button>
-              {selectedConsult.status === 'Scheduled' && (
-                <>
-                  <Button variant="success" onClick={() => { updateStatus(selectedConsult.id, 'In Progress'); setSelectedConsult(null); }} className="flex-1">Start</Button>
-                  <Button variant="danger" onClick={() => { updateStatus(selectedConsult.id, 'Cancelled'); setSelectedConsult(null); }} className="flex-1">Anulează</Button>
-                </>
-              )}
-              {selectedConsult.status === 'In Progress' && (
-                <Button onClick={() => { updateStatus(selectedConsult.id, 'Completed'); setSelectedConsult(null); }} className="flex-1">Finalizează</Button>
-              )}
-            </div>
           </Card>
         </div>
       )}
@@ -278,17 +287,30 @@ export default function Consultations() {
                 onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))}
               >
                 <option value="">Selectati pacient...</option>
-                {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {patients.map(p => {
+                  const firstName = p.firstName || p.FirstName || ''
+                  const lastName = p.lastName || p.LastName || ''
+                  const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+                  const patientId = p.patientId || p.PatientId
+                  return <option key={patientId} value={patientId}>{name}</option>
+                })}
               </select>
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Tip Consultatie *</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Motiv Prezentare *</label>
               <input
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none"
-                placeholder="Ex. Evaluare Cardiologie"
-                value={form.type}
-                onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                placeholder="Ex. Dureri de cap frecvente"
+                value={form.presentationReason}
+                onChange={e => setForm(f => ({ ...f, presentationReason: e.target.value }))}
               />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Simptome</label>
+              <textarea rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none resize-none"
+                placeholder="Ex. Cefalee, ameteala, oboseala"
+                value={form.symptoms}
+                onChange={e => setForm(f => ({ ...f, symptoms: e.target.value }))} />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Data</label>
@@ -300,43 +322,47 @@ export default function Consultations() {
               <input type="time" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none"
                 value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Mod</label>
-              <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none"
-                value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}>
-                <option>În Persoană</option>
-                <option>Telehealth</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Prioritate</label>
-              <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none"
-                value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                <option>Obișnuit</option>
-                <option>Înalt</option>
-                <option>Urgent</option>
-              </select>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Cod Diagnostic</label>
+              <input
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none"
+                placeholder="Ex. G43.9"
+                value={form.diagnosisCode}
+                onChange={e => setForm(f => ({ ...f, diagnosisCode: e.target.value }))}
+              />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Physician</label>
-              <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none"
-                value={form.physician} onChange={e => setForm(f => ({ ...f, physician: e.target.value }))}>
-                <option>Dr. Sarah Chen</option>
-                <option>Dr. Michael Torres</option>
-                <option>Dr. James Patel</option>
-              </select>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Text Diagnostic</label>
+              <textarea rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none resize-none"
+                placeholder="Descriere diagnostic..."
+                value={form.diagnosticText}
+                onChange={e => setForm(f => ({ ...f, diagnosticText: e.target.value }))} />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Note</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Trimiteri</label>
+              <textarea rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none resize-none"
+                placeholder="Trimiteri..."
+                value={form.referrals}
+                onChange={e => setForm(f => ({ ...f, referrals: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Retete Generate</label>
+              <textarea rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none resize-none"
+                placeholder="Retete..."
+                value={form.generatedPrescriptions}
+                onChange={e => setForm(f => ({ ...f, generatedPrescriptions: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Observatii</label>
               <textarea rows={3} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none resize-none"
-                placeholder="Note clinice..."
+                placeholder="Observatii clinice..."
                 value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
           </div>
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setDialogOpen(false)}>Anulează</Button>
-          <Button onClick={handleCreate} disabled={!form.patientId || !form.type}>Creaza</Button>
+          <Button onClick={handleCreate} disabled={!form.patientId || !form.presentationReason}>Creaza</Button>
         </DialogFooter>
       </Dialog>
     </div>

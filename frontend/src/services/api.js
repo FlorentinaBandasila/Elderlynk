@@ -1,11 +1,15 @@
 const API_BASE = 'https://localhost:7135/api'
 
 const handleResponse = async (res) => {
+  const text = await res.text()
   if (!res.ok) {
-    const error = await res.text()
-    throw new Error(`API Error: ${res.status} - ${error}`)
+    throw new Error(`API Error: ${res.status} - ${text}`)
   }
-  return res.json()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
 }
 
 // ============ PATIENTS ============
@@ -96,7 +100,7 @@ export const consultationAPI = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
-    return res.json()
+    return handleResponse(res)
   },
 
   update: async (id, data) => {

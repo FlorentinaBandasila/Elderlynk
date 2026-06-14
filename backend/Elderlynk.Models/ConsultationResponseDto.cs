@@ -9,6 +9,9 @@ namespace Elderlynk.Models
         public string? PresentationReason { get; set; }
         public string? Symptoms { get; set; }
         public string? DiagnosisCode { get; set; }
+        public string? DiagnosticText { get; set; }
+        public string? Referrals { get; set; }
+        public string? GeneratedPrescriptions { get; set; }
         public string? Notes { get; set; }
     }
 }

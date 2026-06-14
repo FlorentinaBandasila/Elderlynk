@@ -145,19 +145,22 @@ export const mapConsultationFromAPI = (apiConsultation) => {
   return {
     id: `c${apiConsultation.consultationId}`,
     consultationId: apiConsultation.consultationId,
-    patientId: `p${apiConsultation.patientId}` || '',
+    patientId: apiConsultation.patientId || '',
     patientName,
-    type: 'Medical Consultation',
+    type: apiConsultation.presentationReason || 'Medical Consultation',
     date: apiConsultation.consultationDate?.split('T')[0] || new Date().toISOString().split('T')[0],
     time: apiConsultation.consultationDate?.split('T')[1]?.slice(0, 5) || '09:00',
     mode: 'In-Person',
     priority: 'Routine',
     physician: 'Unknown',
     status: 'Scheduled',
-    notes: apiConsultation.notes || '',
     presentationReason: apiConsultation.presentationReason || '',
     symptoms: apiConsultation.symptoms || '',
     diagnosisCode: apiConsultation.diagnosisCode || apiConsultation.Diagnostic_Cod_ICD9 || '',
+    diagnosticText: apiConsultation.diagnosticText || '',
+    referrals: apiConsultation.referrals || '',
+    generatedPrescriptions: apiConsultation.generatedPrescriptions || '',
+    notes: apiConsultation.notes || '',
     doctorId: apiConsultation.doctorId || null,
   }
 }
@@ -165,9 +168,13 @@ export const mapConsultationFromAPI = (apiConsultation) => {
 export const mapConsultationToAPI = (consultation) => ({
   patientId: consultation.patientId ? parseInt(consultation.patientId.replace('p', '')) : null,
   doctorId: consultation.doctorId ? parseInt(consultation.doctorId.replace('d', '')) : null,
+  consultationDate: consultation.consultationDate,
   presentationReason: consultation.presentationReason || '',
   symptoms: consultation.symptoms || '',
   diagnosisCode: consultation.diagnosisCode || '',
+  diagnosticText: consultation.diagnosticText || '',
+  referrals: consultation.referrals || '',
+  generatedPrescriptions: consultation.generatedPrescriptions || '',
   notes: consultation.notes || '',
 })
 

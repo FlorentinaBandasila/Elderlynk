@@ -148,7 +148,7 @@ export default function SensorConfig() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-slate-800">Configurare Senzori</h1>
-        <p className="text-slate-500 mt-1">Monitorizare stare hardware și configurare praguri pentru toate dispozitivele</p>
+        <p className="tethisxt-slate-500 mt-1">Monitorizare stare hardware și configurare praguri pentru toate dispozitivele</p>
       </div>
 
       {/* Stat cards */}
