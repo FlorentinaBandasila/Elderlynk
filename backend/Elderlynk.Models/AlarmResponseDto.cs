@@ -12,5 +12,9 @@ namespace Elderlynk.Models
         public int? SupervisorId { get; set; }
         public string? ResolutionNotes { get; set; }
         public bool? IsResolved { get; set; }
+        public string? PatientFirstName { get; set; }
+        public string? PatientLastName { get; set; }
+        public string? SensorName { get; set; }
+        public decimal? MeasurementValue { get; set; }
     }
 }

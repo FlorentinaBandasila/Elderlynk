@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, Clock, Bell } from 'lucide-react'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -10,8 +10,8 @@ import { mapAlarmFromAPI, mapAlarmToAPI } from '@/services/mappers'
 
 const severityVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'gray' }
 const statusVariant   = { Active: 'red', Acknowledged: 'yellow', Resolved: 'green' }
-const severities = ['Toate', 'Critic', 'Înalt', 'Mediu', 'Mic']
-const statuses   = ['Toate', 'Activ', 'Recunoscut', 'Rezolvat']
+const severities = ['Toate', 'Înalte', 'Medii']
+const statuses   = ['Toate', 'Activ', 'Rezolvate']
 
 export default function LiveAlarms() {
   const [alarms, setAlarms]         = useState(initialAlarms)
@@ -41,14 +41,16 @@ export default function LiveAlarms() {
   }, [])
 
   const counts = {
-    active:       alarms.filter(a => a.status === 'Active').length,
-    critical:     alarms.filter(a => a.severity === 'Critical' && a.status === 'Active').length,
-    acknowledged: alarms.filter(a => a.status === 'Acknowledged').length,
+    active:       alarms.length,
+    critical:     alarms.filter(a => a.severity === 'High').length,
+    medium:       alarms.filter(a => a.severity === 'Medium').length,
     resolved:     alarms.filter(a => a.status === 'Resolved').length,
   }
 
-  const severityMap = { 'Toate': 'All', 'Critic': 'Critical', 'Înalt': 'High', 'Mediu': 'Medium', 'Mic': 'Low' }
-  const statusMap = { 'Toate': 'All', 'Activ': 'Active', 'Recunoscut': 'Acknowledged', 'Rezolvat': 'Resolved' }
+  const severityMap = { 'Toate': 'All', 'Înalte': 'High', 'Medii': 'Medium' }
+  const statusMap = { 'Toate': 'All', 'Activ': 'Active', 'Rezolvate': 'Resolved' }
+  const severityDisplayMap = { 'Critical': 'Critic', 'High': 'Înalt', 'Medium': 'Mediu', 'Low': 'Mic' }
+  const statusDisplayMap = { 'Active': 'Activ', 'Acknowledged': 'Recunoscut', 'Resolved': 'Rezolvat' }
 
   const filtered = alarms.filter(a => {
     const mappedSev = severityMap[severityFilter] || severityFilter
@@ -97,10 +99,10 @@ export default function LiveAlarms() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Activ',       value: counts.active,       color: '#e63946', bg: '#fee2e2', icon: AlertTriangle },
-          { label: 'Critic',     value: counts.critical,     color: '#b91c1c', bg: '#fecdd3', icon: AlertTriangle },
-          { label: 'Recunoscut', value: counts.acknowledged, color: '#d97706', bg: '#fef9c3', icon: Clock },
-          { label: 'Rezolvat',     value: counts.resolved,     color: '#16a34a', bg: '#dcfce7', icon: CheckCircle },
+          { label: 'Total Alarme', value: counts.active,       color: '#0f4c81', bg: '#dbeafe', icon: Bell },
+          { label: 'Înalte',     value: counts.critical,     color: '#b91c1c', bg: '#fecdd3', icon: AlertTriangle },
+          { label: 'Medii',      value: counts.medium,       color: '#d97706', bg: '#fef9c3', icon: Clock },
+          { label: 'Rezolvate',  value: counts.resolved,     color: '#16a34a', bg: '#dcfce7', icon: CheckCircle },
         ].map(s => (
           <Card key={s.label}>
             <CardBody className="flex items-center gap-3 py-4">
@@ -188,68 +190,28 @@ export default function LiveAlarms() {
                     style={isCritActive ? { backgroundColor: '#fff8f8' } : {}}
                   >
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-shrink-0">
-                          {isCritActive && (
-                            <span
-                              className="absolute inset-0 rounded-full animate-ping opacity-75"
-                              style={{ backgroundColor: '#e63946' }}
-                            />
-                          )}
-                          <div
-                            className="w-2.5 h-2.5 rounded-full relative"
-                            style={{
-                              backgroundColor: a.status === 'Resolved' ? '#16a34a'
-                                : a.status === 'Acknowledged' ? '#d97706'
-                                : a.severity === 'Critical' ? '#e63946' : '#d97706',
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <div className="font-medium text-slate-700 text-xs">{a.patientName}</div>
-                          <div className="text-slate-400 text-xs">Room {a.room}</div>
-                        </div>
-                      </div>
+                      <div className="font-medium text-slate-700 text-sm">{a.patientName}</div>
                     </td>
                     <td className="px-5 py-3">
-                      <div className="text-slate-700 text-xs font-medium">{a.type}</div>
-                      <div className="text-slate-400 text-xs max-w-xs truncate">{a.message}</div>
+                      <div className="text-slate-700 text-sm max-w-xs truncate">{a.message}</div>
                     </td>
-                    <td className="px-5 py-3 text-xs text-slate-500">{a.sensor}</td>
+                    <td className="px-5 py-3 text-sm text-slate-500">{a.sensor}</td>
                     <td className="px-5 py-3">
-                      <span className="text-sm font-bold text-slate-700">{a.value}</span>
-                      <div className="text-xs text-slate-400">thr: {a.threshold}</div>
+                      <span className="text-sm font-bold text-slate-700">{a.value || '-'}</span>
                     </td>
                     <td className="px-5 py-3">
-                      <Badge variant={severityVariant[a.severity]}>{a.severity}</Badge>
+                      <Badge variant={severityVariant[a.severity]}>{severityDisplayMap[a.severity] || a.severity}</Badge>
                     </td>
                     <td className="px-5 py-3">
-                      <Badge variant={statusVariant[a.status]}>{a.status}</Badge>
+                      <Badge variant={statusVariant[a.status]}>{statusDisplayMap[a.status] || a.status}</Badge>
                     </td>
-                    <td className="px-5 py-3 text-xs text-slate-400 whitespace-nowrap">{fmt(a.timestamp)}</td>
+                    <td className="px-5 py-3 text-sm text-slate-400 whitespace-nowrap">{fmt(a.timestamp)}</td>
                     <td className="px-5 py-3">
-                      <div className="flex gap-1.5">
-                        {a.status === 'Active' && (
-                          <>
-                            <Button size="sm" variant="warning" onClick={() => acknowledge(a.id)}>
-                              <CheckCircle size={12} /> Ack
-                            </Button>
-                            <Button size="sm" variant="success" onClick={() => resolve(a.id)}>
-                              <XCircle size={12} /> Resolve
-                            </Button>
-                          </>
-                        )}
-                        {a.status === 'Acknowledged' && (
-                          <Button size="sm" variant="success" onClick={() => resolve(a.id)}>
-                            <XCircle size={12} /> Resolve
-                          </Button>
-                        )}
-                        {a.status === 'Resolved' && (
-                          <span className="text-xs text-slate-400 flex items-center gap-1">
-                            <CheckCircle size={12} style={{ color: '#16a34a' }} /> Done
-                          </span>
-                        )}
-                      </div>
+                      {a.status !== 'Resolved' && (
+                        <Button size="sm" variant="success" onClick={() => resolve(a.id)}>
+                          Rezolva
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 )

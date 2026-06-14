@@ -104,23 +104,22 @@ export const mapPatientToAPI = (patient) => ({
 // Map API Alarm response to frontend Alarm format
 export const mapAlarmFromAPI = (apiAlarm) => {
   const severityMap = {
-    HIGH: 'Critical',
+    CRITICAL: 'Critical',
+    HIGH: 'High',
     MEDIUM: 'Medium',
     LOW: 'Low',
   }
-  const patientName = [apiAlarm.firstName, apiAlarm.lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+  const patientName = [apiAlarm.patientFirstName, apiAlarm.patientLastName].filter(Boolean).join(' ') || 'Unknown Patient'
 
   return {
     id: `a${apiAlarm.alarmId}`,
     alarmId: apiAlarm.alarmId,
-    patientId: `p${apiAlarm.patientId}` || '',
+    patientId: apiAlarm.patientId || '',
     patientName,
-    room: '---',
-    sensor: 'Unknown Sensor',
+    sensor: apiAlarm.sensorName || 'Unknown Sensor',
     type: apiAlarm.alarmType || 'Unknown',
     severity: severityMap[apiAlarm.alarmType?.toUpperCase()] || 'High',
-    value: apiAlarm.message || '---',
-    threshold: '---',
+    value: apiAlarm.measurementValue !== undefined ? apiAlarm.measurementValue : '',
     timestamp: apiAlarm.triggerDate || new Date().toISOString(),
     status: apiAlarm.isResolved ? 'Resolved' : 'Active',
     message: apiAlarm.message || 'No message',

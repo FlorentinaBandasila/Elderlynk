@@ -18,18 +18,43 @@ namespace Elderlynk.Services
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
-            return alarms.Select(a => new AlarmResponseDto
-            {
-                AlarmId = a.AlarmId,
-                SensorId = a.SensorId,
-                PatientId = a.PatientId,
-                AlarmType = a.AlarmType,
-                Message = a.Message,
-                TriggerDate = a.TriggerDate,
-                ResolutionDate = a.ResolutionDate,
-                SupervisorId = a.SupervisorId,
-                ResolutionNotes = a.ResolutionNotes,
-                IsResolved = a.IsResolved
+            var patients = await _context.Set<Patient>()
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+
+            var sensors = await _context.Set<SensorConfig>()
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+
+            var measurements = await _context.Set<SensorMeasurement>()
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+
+            return alarms.Select(a => {
+                var patient = patients.FirstOrDefault(p => p.PatientId == a.PatientId);
+                var sensor = sensors.FirstOrDefault(s => s.SensorId == a.SensorId);
+                var latestMeasurement = measurements
+                    .Where(m => m.SensorId == a.SensorId)
+                    .OrderByDescending(m => m.MeasurementDateTime)
+                    .FirstOrDefault();
+
+                return new AlarmResponseDto
+                {
+                    AlarmId = a.AlarmId,
+                    SensorId = a.SensorId,
+                    PatientId = a.PatientId,
+                    AlarmType = a.AlarmType,
+                    Message = a.Message,
+                    TriggerDate = a.TriggerDate,
+                    ResolutionDate = a.ResolutionDate,
+                    SupervisorId = a.SupervisorId,
+                    ResolutionNotes = a.ResolutionNotes,
+                    IsResolved = a.IsResolved,
+                    PatientFirstName = patient?.FirstName,
+                    PatientLastName = patient?.LastName,
+                    SensorName = sensor?.Name,
+                    MeasurementValue = latestMeasurement?.Value
+                };
             });
         }
 
@@ -42,6 +67,20 @@ namespace Elderlynk.Services
             if (alarm == null)
                 return null;
 
+            var patient = await _context.Set<Patient>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PatientId == alarm.PatientId, cancellationToken);
+
+            var sensor = await _context.Set<SensorConfig>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.SensorId == alarm.SensorId, cancellationToken);
+
+            var latestMeasurement = await _context.Set<SensorMeasurement>()
+                .AsNoTracking()
+                .Where(m => m.SensorId == alarm.SensorId)
+                .OrderByDescending(m => m.MeasurementDateTime)
+                .FirstOrDefaultAsync(cancellationToken);
+
             return new AlarmResponseDto
             {
                 AlarmId = alarm.AlarmId,
@@ -53,7 +92,11 @@ namespace Elderlynk.Services
                 ResolutionDate = alarm.ResolutionDate,
                 SupervisorId = alarm.SupervisorId,
                 ResolutionNotes = alarm.ResolutionNotes,
-                IsResolved = alarm.IsResolved
+                IsResolved = alarm.IsResolved,
+                PatientFirstName = patient?.FirstName,
+                PatientLastName = patient?.LastName,
+                SensorName = sensor?.Name,
+                MeasurementValue = latestMeasurement?.Value
             };
         }
 
@@ -72,6 +115,20 @@ namespace Elderlynk.Services
             _context.Set<Alarm>().Add(alarm);
             await _context.SaveChangesAsync(cancellationToken);
 
+            var patient = await _context.Set<Patient>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PatientId == alarm.PatientId, cancellationToken);
+
+            var sensor = await _context.Set<SensorConfig>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.SensorId == alarm.SensorId, cancellationToken);
+
+            var latestMeasurement = await _context.Set<SensorMeasurement>()
+                .AsNoTracking()
+                .Where(m => m.SensorId == alarm.SensorId)
+                .OrderByDescending(m => m.MeasurementDateTime)
+                .FirstOrDefaultAsync(cancellationToken);
+
             return new AlarmResponseDto
             {
                 AlarmId = alarm.AlarmId,
@@ -83,7 +140,11 @@ namespace Elderlynk.Services
                 ResolutionDate = alarm.ResolutionDate,
                 SupervisorId = alarm.SupervisorId,
                 ResolutionNotes = alarm.ResolutionNotes,
-                IsResolved = alarm.IsResolved
+                IsResolved = alarm.IsResolved,
+                PatientFirstName = patient?.FirstName,
+                PatientLastName = patient?.LastName,
+                SensorName = sensor?.Name,
+                MeasurementValue = latestMeasurement?.Value
             };
         }
 
