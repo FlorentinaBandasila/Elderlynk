@@ -1,44 +1,39 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, ChevronDown, ChevronRight, Heart, Wind, Thermometer, AlertTriangle, Plus } from 'lucide-react'
+import { Search, Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
-import { patients as initialPatients, alarms } from '@/data/mock'
+import { alarms } from '@/data/mock'
 import { patientAPI } from '@/services/api'
 import { mapPatientFromAPI, mapPatientToAPI } from '@/services/mappers'
 
-const riskVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'green' }
-const risks = ['Toate', 'Critic', 'Înalt', 'Mediu', 'Mic']
 const activeAlarms = alarms.filter(a => a.status === 'Active')
 
 export default function Patients() {
   const navigate = useNavigate()
-  const [patients, setPatients]   = useState(initialPatients)
+  const [patients, setPatients]   = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch]       = useState('')
-  const [riskFilter, setRisk]     = useState('Toate')
-  const [expanded, setExpanded]   = useState(null)
   const [showDialog, setShowDialog] = useState(false)
+  const hasInitialized = React.useRef(false)
 
   useEffect(() => {
+    if (hasInitialized.current) return
+    hasInitialized.current = true
+
     const fetchPatients = async () => {
       setLoading(true)
       try {
         const response = await patientAPI.getAll()
-        console.log('API Response:', response)
-
-        // Use API data directly, don't fall back to mock data
         const transformedPatients = response && response.length > 0
           ? response.map((p, index) => mapPatientFromAPI(p, index))
           : []
 
-        console.log('Transformed Patients:', transformedPatients)
         setPatients(transformedPatients)
       } catch (error) {
         console.error('Error fetching patients:', error)
-        setPatients([]) // Show empty, not mock data
+        setPatients([])
       } finally {
         setLoading(false)
       }
@@ -62,13 +57,8 @@ export default function Patients() {
   const filtered = patients.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.room.toLowerCase().includes(search.toLowerCase())
-    const riskMap = { 'Toate': 'All', 'Critic': 'Critical', 'Înalt': 'High', 'Mediu': 'Medium', 'Mic': 'Low' }
-    const mappedRisk = riskMap[riskFilter] || riskFilter
-    const matchRisk = mappedRisk === 'All' || p.risk === mappedRisk
-    return matchSearch && matchRisk
+    return matchSearch
   })
-
-  const toggle = id => setExpanded(e => e === id ? null : id)
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -120,12 +110,11 @@ export default function Patients() {
 
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Lista Pacienților</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{patients.length} pacienți înregistrați</p>
+          <h1 className="font-bold text-slate-800" style={{ fontSize: '32px' }}>Lista Pacienților</h1>
         </div>
         <button
           onClick={() => setShowDialog(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm text-white cursor-pointer hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium text-sm text-white cursor-pointer hover:opacity-90 transition-opacity"
           style={{ backgroundColor: '#0f4c81' }}
         >
           <Plus size={18} />
@@ -133,32 +122,16 @@ export default function Patients() {
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 flex-1 min-w-52 max-w-xs">
-          <Search size={15} className="text-slate-400 flex-shrink-0" />
-          <input
-            className="bg-transparent text-sm text-slate-700 placeholder-slate-400 outline-none w-full"
-            placeholder="Căutați după nume sau cameră..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {risks.map(r => (
-            <button
-              key={r}
-              onClick={() => setRisk(r)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors"
-              style={riskFilter === r
-                ? { backgroundColor: '#0f4c81', color: '#fff' }
-                : { backgroundColor: '#fff', border: '1px solid #e2e8f0', color: '#475569' }
-              }
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+      {/* Search */}
+      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-5 py-3 w-full max-w-xs">
+        <Search size={15} className="text-slate-400 flex-shrink-0" />
+        <input
+          className="bg-transparent text-slate-700 placeholder-slate-400 outline-none w-full"
+          placeholder="Căutați după nume"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ fontSize: '16px' }}
+        />
       </div>
 
       {/* Table */}
@@ -167,123 +140,67 @@ export default function Patients() {
           <table className="w-full">
             <thead>
               <tr style={{ backgroundColor: '#0f4c81' }}>
-                {['Pacient', 'Cameră', 'Vârstă', 'Diagnostic', 'Stare', 'Actualizat', ''].map((h, i) => (
+                {['ID', '', 'Nume', 'CNP', 'Vârstă', 'Telefon', 'Oras', 'Acțiune'].map((h, i) => {
+                  const isLeftAligned = [2, 3, 5, 6].includes(i)
+                  const paddingClass = i === 0 ? 'px-5' : i === 1 ? 'px-3' : i === 2 ? 'px-2' : i === 3 ? 'px-2' : i === 7 ? 'px-3' : 'px-5'
+                  return (
                   <th
                     key={i}
-                    className="px-5 py-3 text-left text-xs font-semibold text-white uppercase tracking-wide"
-                    style={i === 6 ? { width: '32px' } : {}}
+                    className={`${paddingClass} py-3 font-semibold text-white uppercase tracking-wide ${isLeftAligned ? 'text-left' : 'text-center'}`}
+                    style={{
+                      fontSize: '18px',
+                      width: i === 0 ? '40px' : i === 1 ? '50px' : i === 3 ? '80px' : i === 5 ? '220px' : i === 6 ? '160px' : i === 7 ? '100px' : 'auto'
+                    }}
                   >
                     {h}
                   </th>
-                ))}
+                )})}
               </tr>
             </thead>
             <tbody>
               {filtered.map(p => {
                 const patientAlarms = activeAlarms.filter(a => a.patientId === p.id)
-                const isExpanded = expanded === p.id
                 return (
-                  <React.Fragment key={p.id}>
-                    <tr
-                      className="border-b border-slate-100 hover:bg-slate-50/60 cursor-pointer transition-colors"
-                      onClick={() => toggle(p.id)}
-                    >
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar name={p.name} size="sm" />
-                          <div>
-                            <button
-                              className="font-semibold text-sm hover:underline cursor-pointer"
-                              style={{ color: '#0f4c81' }}
-                              onClick={e => { e.stopPropagation(); navigate(`/patients/${p.id}`) }}
-                            >
-                              {p.name}
-                            </button>
-                            {patientAlarms.length > 0 && (
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <AlertTriangle size={11} style={{ color: '#e63946' }} />
-                                <span className="text-xs" style={{ color: '#e63946' }}>
-                                  {patientAlarms.length} alarmă{patientAlarms.length > 1 ? 'e active' : ' activă'}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-sm text-slate-600">Cameră {p.room}</td>
-                      <td className="px-5 py-3 text-sm text-slate-600">{p.age}</td>
-                      <td className="px-5 py-3 text-sm text-slate-600 max-w-xs">
-                        <span className="truncate block">{p.diagnoses[0]}</span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <Badge variant={riskVariant[p.risk]}>{p.risk}</Badge>
-                      </td>
-                      <td className="px-5 py-3 text-xs text-slate-400">May 6, 00:09</td>
-                      <td className="px-3 py-3 text-slate-400">
-                        {isExpanded
-                          ? <ChevronDown size={14} />
-                          : <ChevronRight size={14} />
-                        }
-                      </td>
-                    </tr>
-
-                    {isExpanded && (
-                      <tr className="border-b border-slate-100">
-                        <td colSpan={7} style={{ backgroundColor: '#f0f6ff', padding: '0' }}>
-                          <div className="px-8 py-4 flex flex-wrap items-center gap-6">
-                            <div className="flex items-center gap-2">
-                              <Heart size={14} style={{ color: '#e63946' }} />
-                              <span className="text-xs text-slate-500">HR</span>
-                              <span
-                                className="text-sm font-bold"
-                                style={{ color: p.vitals.hr > 100 || p.vitals.hr < 55 ? '#e63946' : '#1e293b' }}
-                              >
-                                {p.vitals.hr} bpm
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Wind size={14} style={{ color: '#0f4c81' }} />
-                              <span className="text-xs text-slate-500">SpO₂</span>
-                              <span
-                                className="text-sm font-bold"
-                                style={{ color: p.vitals.spo2 < 92 ? '#e63946' : '#1e293b' }}
-                              >
-                                {p.vitals.spo2}%
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Thermometer size={14} style={{ color: '#d97706' }} />
-                              <span className="text-xs text-slate-500">Temp</span>
-                              <span
-                                className="text-sm font-bold"
-                                style={{ color: p.vitals.temp > 38 ? '#e63946' : '#1e293b' }}
-                              >
-                                {p.vitals.temp}°C
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-500">BP</span>
-                              <span className="text-sm font-bold text-slate-700">{p.vitals.bp}</span>
-                            </div>
-                            <div className="ml-auto">
-                              <button
-                                onClick={e => { e.stopPropagation(); navigate(`/patients/${p.id}`) }}
-                                className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white cursor-pointer hover:opacity-90 transition-opacity"
-                                style={{ backgroundColor: '#0f4c81' }}
-                              >
-                                Fisa Pacient
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                  <tr
+                    key={p.id}
+                    className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
+                  >
+                    <td className="px-5 py-3 font-semibold text-slate-600 text-center" style={{ fontSize: '18px' }}>#{p.patientId}</td>
+                    <td className="px-3 py-3 flex justify-center">
+                      <Avatar name={p.name} size="lg" />
+                    </td>
+                    <td className="px-2 py-3 text-left">
+                      <button
+                        className="font-semibold hover:underline cursor-pointer whitespace-nowrap"
+                        style={{ color: '#0f4c81', fontSize: '18px' }}
+                        onClick={e => { e.stopPropagation(); navigate(`/patients/${p.id}`) }}
+                      >
+                        {p.name}
+                      </button>
+                    </td>
+                    <td className="px-2 py-3 text-slate-600 text-left" style={{ fontSize: '18px' }}>{p.cnp || '-'}</td>
+                    <td className="px-5 py-3 text-slate-600 text-center" style={{ fontSize: '18px' }}>{p.age}</td>
+                    <td className="px-5 py-3 text-slate-600 text-left max-w-xs" style={{ fontSize: '18px' }}>
+                      <span className="truncate block">{p.phone || '-'}</span>
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 text-left max-w-xs" style={{ fontSize: '18px' }}>
+                      <span className="truncate block">{p.city || '-'}</span>
+                    </td>
+                    <td className="px-3 py-3 flex justify-center">
+                      <button
+                        onClick={e => { e.stopPropagation(); navigate(`/patients/${p.id}`) }}
+                        className="font-semibold px-8 py-2 rounded-lg text-white cursor-pointer hover:opacity-90 transition-opacity"
+                        style={{ backgroundColor: '#0f4c81', fontSize: '16px' }}
+                      >
+                        Fisa
+                      </button>
+                    </td>
+                  </tr>
                 )
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-slate-400 text-sm">
+                  <td colSpan={8} className="px-5 py-10 text-center text-slate-400 text-sm">
                     Nu există pacienți care să se potrivească cu filtrele actuale.
                   </td>
                 </tr>

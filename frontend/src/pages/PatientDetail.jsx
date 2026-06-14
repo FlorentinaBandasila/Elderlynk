@@ -102,14 +102,6 @@ export default function PatientDetail() {
   return (
     <div className="p-6 space-y-5">
 
-      {/* Back */}
-      <button
-        onClick={() => navigate('/patients')}
-        className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
-      >
-        <ArrowLeft size={14} /> Înapoi la pacienți
-      </button>
-
       {/* Title */}
       <h1 className="text-2xl font-bold text-slate-800">Vedere Generală Pacient</h1>
 

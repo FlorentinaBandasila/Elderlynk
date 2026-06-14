@@ -66,14 +66,19 @@ namespace Elderlynk.Web.Controllers
 
                 var patient = new Patient
                 {
-                    UserId = dto.UserId,
+                    LastName = dto.LastName,
+                    FirstName = dto.FirstName,
                     CNP = dto.CNP,
-                    Age = dto.Age,
                     Street = dto.Street,
                     City = dto.City,
                     County = dto.County,
+                    PostalCode = dto.PostalCode,
+                    Phone = dto.Phone,
+                    Email = dto.Email,
                     Profession = dto.Profession,
-                    WorkPlace = dto.WorkPlace
+                    WorkPlace = dto.WorkPlace,
+                    Active = true,
+                    DateAdded = DateTime.UtcNow
                 };
 
                 var dbContext = _service.GetType().GetField("_context", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(_service) as DbContext;
@@ -83,14 +88,20 @@ namespace Elderlynk.Web.Controllers
                 return CreatedAtAction(nameof(GetById), new { id = patient.PatientId }, new PatientResponseDto
                 {
                     PatientId = patient.PatientId,
-                    UserId = patient.UserId,
+                    LastName = patient.LastName,
+                    FirstName = patient.FirstName,
                     CNP = patient.CNP,
-                    Age = patient.Age,
                     Street = patient.Street,
                     City = patient.City,
                     County = patient.County,
+                    PostalCode = patient.PostalCode,
+                    Phone = patient.Phone,
+                    Email = patient.Email,
                     Profession = patient.Profession,
-                    WorkPlace = patient.WorkPlace
+                    WorkPlace = patient.WorkPlace,
+                    Active = patient.Active,
+                    DateAdded = patient.DateAdded,
+                    LastModified = patient.LastModified
                 });
             }
             catch (Exception ex)

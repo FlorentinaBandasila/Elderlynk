@@ -65,8 +65,6 @@ namespace Elderlynk.Web
                     .IsRequired()
                     .HasMaxLength(13)
                     .HasColumnName("CNP");
-                entity.Property(e => e.Age)
-                    .HasColumnName("Varsta");
                 entity.Property(e => e.Street)
                     .HasMaxLength(100)
                     .HasColumnName("Adresa_Strada");
@@ -82,6 +80,12 @@ namespace Elderlynk.Web
                 entity.Property(e => e.WorkPlace)
                     .HasMaxLength(50)
                     .HasColumnName("Loc_Munca");
+                entity.Property(e => e.FirstName)
+                    .HasMaxLength(100)
+                    .HasColumnName("Prenume");
+                entity.Property(e => e.LastName)
+                    .HasMaxLength(100)
+                    .HasColumnName("Nume");
             });
 
             modelBuilder.Entity<UserRole>(entity =>

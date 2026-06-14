@@ -10,14 +10,14 @@ namespace Elderlynk.Models
         [Column("ID_Pacient")]
         public int PatientId { get; set; }
 
-        [Column("ID_Utilizator")]
-        public int? UserId { get; set; }
+        [Column("Nume")]
+        public string? LastName { get; set; }
+
+        [Column("Prenume")]
+        public string? FirstName { get; set; }
 
         [Column("CNP")]
         public string CNP { get; set; } = null!;
-
-        [Column("Varsta")]
-        public int? Age { get; set; }
 
         [Column("Adresa_Strada")]
         public string? Street { get; set; }
@@ -28,10 +28,31 @@ namespace Elderlynk.Models
         [Column("Adresa_Judet")]
         public string? County { get; set; }
 
+        [Column("Cod_Postal")]
+        public string? PostalCode { get; set; }
+
+        [Column("Telefon")]
+        public string? Phone { get; set; }
+
+        [Column("Email")]
+        public string? Email { get; set; }
+
         [Column("Profesie")]
         public string? Profession { get; set; }
 
         [Column("Loc_Munca")]
         public string? WorkPlace { get; set; }
+
+        [Column("Parola_Hash")]
+        public string? PasswordHash { get; set; }
+
+        [Column("Data_Adaugare")]
+        public DateTime? DateAdded { get; set; }
+
+        [Column("Data_Ultima_Modificare")]
+        public DateTime? LastModified { get; set; }
+
+        [Column("Activ")]
+        public bool Active { get; set; } = true;
     }
 }
