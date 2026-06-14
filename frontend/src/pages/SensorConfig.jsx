@@ -4,7 +4,7 @@ import { Card, CardBody } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { sensors as initialSensors } from '@/data/mock'
-import { sensorConfigAPI } from '@/services/api'
+import { sensorConfigAPI, deviceAPI, patientAPI } from '@/services/api'
 import { mapSensorConfigFromAPI, mapSensorConfigToAPI } from '@/services/mappers'
 
 function StatusPill({ status }) {
@@ -37,18 +37,63 @@ export default function SensorConfig() {
     if (effectRan.current) return
     effectRan.current = true
 
-    const fetchSensors = async () => {
+    const fetchData = async () => {
       try {
-        const response = await sensorConfigAPI.getAll()
-        if (response && response.length > 0) {
-          const transformed = response.map(mapSensorConfigFromAPI)
-          setSensors(transformed)
+        // Fetch sensors
+        const sensorsResponse = await sensorConfigAPI.getAll()
+        if (!sensorsResponse || sensorsResponse.length === 0) return
+
+        // Fetch devices and patients to map patient names
+        let devicesMap = {}
+        let patientsMap = {}
+
+        try {
+          const devicesResponse = await deviceAPI.getAll()
+          if (devicesResponse && Array.isArray(devicesResponse)) {
+            devicesResponse.forEach(d => {
+              const deviceId = d.deviceId || d.DeviceId
+              const patientId = d.patientId || d.PatientId
+              if (deviceId && patientId) {
+                devicesMap[deviceId] = patientId
+              }
+            })
+          }
+        } catch (err) {
+          console.error('Error fetching devices:', err)
         }
+
+        try {
+          const patientsResponse = await patientAPI.getAll()
+          if (patientsResponse && Array.isArray(patientsResponse)) {
+            patientsResponse.forEach(p => {
+              const patientId = p.patientId || p.PatientId
+              const firstName = p.firstName || p.FirstName || ''
+              const lastName = p.lastName || p.LastName || ''
+              const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown'
+              patientsMap[patientId] = name
+            })
+          }
+        } catch (err) {
+          console.error('Error fetching patients:', err)
+        }
+
+        // Transform sensors and map patient names
+        const transformed = sensorsResponse.map(sensor => {
+          const mapped = mapSensorConfigFromAPI(sensor)
+          const patientId = devicesMap[sensor.deviceId]
+          if (patientId && patientsMap[patientId]) {
+            mapped.patientName = patientsMap[patientId]
+          }
+          return mapped
+        })
+
+        setSensors(transformed)
       } catch (error) {
-        console.error('Error fetching sensors:', error)
+        console.error('Error fetching data:', error)
       }
     }
-    fetchSensors()
+
+    fetchData()
   }, [])
 
   const patientNames = ['All', ...Array.from(new Set(sensors.map(s => s.patientName || 'Unknown')))]

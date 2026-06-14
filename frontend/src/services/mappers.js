@@ -219,6 +219,7 @@ export const mapSensorConfigFromAPI = (apiConfig) => {
     id: `s${apiConfig.sensorId}`,
     sensorId: apiConfig.sensorId,
     deviceId: apiConfig.deviceId,
+    patientId: apiConfig.patientId,
     name: apiConfig.name || apiConfig.sensorType || 'Unknown',
     type: apiConfig.sensorType || 'Unknown',
     status: apiConfig.active ? 'Online' : 'Offline',
@@ -234,12 +235,13 @@ export const mapSensorConfigFromAPI = (apiConfig) => {
     thresholdMin: apiConfig.lowerAlarmThreshold || 0,
     thresholdMax: apiConfig.upperAlarmThreshold || 100,
     active: apiConfig.active,
-    patientName: 'Unknown',
+    patientName: apiConfig.patientName || 'Unknown',
     room: '---',
     location: `Device ${apiConfig.deviceId}`,
     model: apiConfig.sensorType || 'Unknown Sensor',
     lastValue: '---',
     unit: apiConfig.measurementUnit || '',
+    orderNumber: apiConfig.orderNumber,
   }
 }
 

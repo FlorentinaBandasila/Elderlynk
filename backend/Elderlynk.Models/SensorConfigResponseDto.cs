@@ -4,6 +4,8 @@ namespace Elderlynk.Models
     {
         public int SensorId { get; set; }
         public int? DeviceId { get; set; }
+        public int? PatientId { get; set; }
+        public string? PatientName { get; set; }
         public int? OrderNumber { get; set; }
         public string? Name { get; set; }
         public string? SensorType { get; set; }

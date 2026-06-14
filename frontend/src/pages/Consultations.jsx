@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Calendar, Clock, Video, MapPin, Plus, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Calendar, Clock, Video, MapPin, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Avatar from '@/components/ui/Avatar'
@@ -21,7 +21,12 @@ export default function Consultations() {
     mode: 'In-Person', priority: 'Routine', physician: 'Dr. Sarah Chen', notes: '',
   })
 
+  const effectRan = useRef(false)
+
   useEffect(() => {
+    if (effectRan.current) return
+    effectRan.current = true
+
     const fetchData = async () => {
       try {
         const [consultsRes, patientsRes] = await Promise.all([
@@ -29,12 +34,27 @@ export default function Consultations() {
           patientAPI.getAll().catch(() => []),
         ])
 
-        console.log('Consultations API Response:', consultsRes)
-        console.log('Patients API Response:', patientsRes)
+        // Create patient name map
+        const patientNameMap = {}
+        if (patientsRes && Array.isArray(patientsRes)) {
+          patientsRes.forEach(p => {
+            const firstName = p.firstName || p.FirstName || ''
+            const lastName = p.lastName || p.LastName || ''
+            const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+            patientNameMap[p.patientId || p.PatientId] = name
+          })
+        }
 
-        // Use API data directly, no mock fallback
+        // Transform consultations and map patient names
         const transformedConsults = consultsRes && consultsRes.length > 0
-          ? consultsRes.map(mapConsultationFromAPI)
+          ? consultsRes.map(consult => {
+              const mapped = mapConsultationFromAPI(consult)
+              const patientId = consult.patientId || consult.PatientId
+              if (patientId && patientNameMap[patientId]) {
+                mapped.patientName = patientNameMap[patientId]
+              }
+              return mapped
+            })
           : []
 
         setConsults(transformedConsults)
@@ -139,13 +159,17 @@ export default function Consultations() {
       </div>
 
       {totalPages > 1 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 flex items-center justify-center gap-2">
+        <div className="fixed bottom-0 left-0 right-0 p-4 flex items-center justify-center gap-2">
           <button
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className={`p-2 rounded-lg border border-slate-200 transition-colors ${
+              currentPage === 1
+                ? 'invisible'
+                : 'text-slate-700 hover:bg-slate-50'
+            }`}
           >
-            Anterior
+            <ChevronLeft size={20} />
           </button>
           {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
             <button
@@ -163,9 +187,9 @@ export default function Consultations() {
           <button
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            className="px-3 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Următorul
+            <ChevronRight size={20} />
           </button>
         </div>
       )}
