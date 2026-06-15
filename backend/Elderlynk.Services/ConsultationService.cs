@@ -18,20 +18,8 @@ namespace Elderlynk.Services
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
-            return consultations.Select(c => new ConsultationResponseDto
-            {
-                ConsultationId = c.ConsultationId,
-                PatientId = c.PatientId,
-                DoctorId = c.DoctorId,
-                ConsultationDate = c.ConsultationDate,
-                PresentationReason = c.PresentationReason,
-                Symptoms = c.Symptoms,
-                DiagnosisCode = c.DiagnosisCode,
-                DiagnosticText = c.DiagnosticText,
-                Referrals = c.Referrals,
-                GeneratedPrescriptions = c.GeneratedPrescriptions,
-                Notes = c.Notes
-            });
+            var doctorNames = await BuildDoctorNameMapAsync(consultations, cancellationToken);
+            return consultations.Select(c => Map(c, doctorNames));
         }
 
         public async Task<IEnumerable<ConsultationResponseDto>> GetForUserAsync(int userId, int role, CancellationToken cancellationToken = default)
@@ -58,7 +46,8 @@ namespace Elderlynk.Services
             }
 
             var consultations = await query.ToListAsync(cancellationToken);
-            return consultations.Select(Map);
+            var doctorNames = await BuildDoctorNameMapAsync(consultations, cancellationToken);
+            return consultations.Select(c => Map(c, doctorNames));
         }
 
         public async Task<ConsultationResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -70,20 +59,8 @@ namespace Elderlynk.Services
             if (consultation == null)
                 return null;
 
-            return new ConsultationResponseDto
-            {
-                ConsultationId = consultation.ConsultationId,
-                PatientId = consultation.PatientId,
-                DoctorId = consultation.DoctorId,
-                ConsultationDate = consultation.ConsultationDate,
-                PresentationReason = consultation.PresentationReason,
-                Symptoms = consultation.Symptoms,
-                DiagnosisCode = consultation.DiagnosisCode,
-                DiagnosticText = consultation.DiagnosticText,
-                Referrals = consultation.Referrals,
-                GeneratedPrescriptions = consultation.GeneratedPrescriptions,
-                Notes = consultation.Notes
-            };
+            var doctorNames = await BuildDoctorNameMapAsync(new[] { consultation }, cancellationToken);
+            return Map(consultation, doctorNames);
         }
 
         public async Task<ConsultationResponseDto> CreateAsync(CreateConsultationDto dto, CancellationToken cancellationToken = default)
@@ -105,20 +82,130 @@ namespace Elderlynk.Services
             _context.Set<Consultation>().Add(consultation);
             await _context.SaveChangesAsync(cancellationToken);
 
-            return new ConsultationResponseDto
+            // Optional medical data captured together with the consultation.
+            // Allergies belong to the patient; recommendations and medication schemes
+            // are attached to this newly created consultation (ID_Consultatie is NOT NULL).
+            if (dto.PatientId.HasValue)
             {
-                ConsultationId = consultation.ConsultationId,
-                PatientId = consultation.PatientId,
-                DoctorId = consultation.DoctorId,
-                ConsultationDate = consultation.ConsultationDate,
-                PresentationReason = consultation.PresentationReason,
-                Symptoms = consultation.Symptoms,
-                DiagnosisCode = consultation.DiagnosisCode,
-                DiagnosticText = consultation.DiagnosticText,
-                Referrals = consultation.Referrals,
-                GeneratedPrescriptions = consultation.GeneratedPrescriptions,
-                Notes = consultation.Notes
-            };
+                var patientId = dto.PatientId.Value;
+
+                if (dto.Allergies != null)
+                {
+                    foreach (var a in dto.Allergies)
+                    {
+                        if (string.IsNullOrWhiteSpace(a.Denumire)) continue;
+                        _context.Set<Allergy>().Add(new Allergy
+                        {
+                            PatientId = patientId,
+                            Denumire = a.Denumire.Trim()
+                        });
+                    }
+                }
+
+                if (dto.Recommendations != null)
+                {
+                    foreach (var r in dto.Recommendations)
+                    {
+                        if (string.IsNullOrWhiteSpace(r.Descriere)) continue;
+                        _context.Set<MedicalRecommendation>().Add(new MedicalRecommendation
+                        {
+                            PatientId = patientId,
+                            ConsultationId = consultation.ConsultationId,
+                            DataRecomandarii = DateTime.Now,
+                            TipRecomandare = string.IsNullOrWhiteSpace(r.TipRecomandare) ? null : r.TipRecomandare.Trim(),
+                            Descriere = r.Descriere.Trim()
+                        });
+                    }
+                }
+
+                if (dto.Medications != null)
+                {
+                    foreach (var m in dto.Medications)
+                    {
+                        if (string.IsNullOrWhiteSpace(m.DenumireMedicament) || string.IsNullOrWhiteSpace(m.Doza)) continue;
+                        _context.Set<MedicationScheme>().Add(new MedicationScheme
+                        {
+                            PatientId = patientId,
+                            ConsultationId = consultation.ConsultationId,
+                            DenumireMedicament = m.DenumireMedicament.Trim(),
+                            Doza = m.Doza.Trim(),
+                            // Frecventa_Administrare is NOT NULL in the DB; store "" when not supplied.
+                            FrecventaAdministrare = m.FrecventaAdministrare?.Trim() ?? string.Empty,
+                            DurataTratament = string.IsNullOrWhiteSpace(m.DurataTratament) ? null : m.DurataTratament.Trim(),
+                            DataPrescriere = DateTime.Now,
+                            ObservatiiIngrijitor = string.IsNullOrWhiteSpace(m.ObservatiiIngrijitor) ? null : m.ObservatiiIngrijitor.Trim()
+                        });
+                    }
+                }
+
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            var doctorNames = await BuildDoctorNameMapAsync(new[] { consultation }, cancellationToken);
+            return Map(consultation, doctorNames);
+        }
+
+        public async Task<IEnumerable<MedicalRecommendationResponseDto>> GetRecommendationsAsync(int consultationId, CancellationToken cancellationToken = default)
+        {
+            var items = await _context.Set<MedicalRecommendation>()
+                .AsNoTracking()
+                .Where(r => r.ConsultationId == consultationId)
+                .OrderByDescending(r => r.DataRecomandarii)
+                .ToListAsync(cancellationToken);
+
+            return items.Select(r => new MedicalRecommendationResponseDto
+            {
+                RecommendationId = r.RecommendationId,
+                PatientId = r.PatientId,
+                ConsultationId = r.ConsultationId,
+                DataRecomandarii = r.DataRecomandarii,
+                TipRecomandare = r.TipRecomandare,
+                Descriere = r.Descriere
+            });
+        }
+
+        public async Task<IEnumerable<MedicationSchemeResponseDto>> GetMedicationsAsync(int consultationId, CancellationToken cancellationToken = default)
+        {
+            var items = await _context.Set<MedicationScheme>()
+                .AsNoTracking()
+                .Where(m => m.ConsultationId == consultationId)
+                .OrderByDescending(m => m.DataPrescriere)
+                .ToListAsync(cancellationToken);
+
+            return items.Select(m => new MedicationSchemeResponseDto
+            {
+                MedicationId = m.MedicationId,
+                PatientId = m.PatientId,
+                ConsultationId = m.ConsultationId,
+                DenumireMedicament = m.DenumireMedicament,
+                Doza = m.Doza,
+                FrecventaAdministrare = m.FrecventaAdministrare,
+                DurataTratament = m.DurataTratament,
+                DataPrescriere = m.DataPrescriere,
+                ObservatiiIngrijitor = m.ObservatiiIngrijitor
+            });
+        }
+
+        /// <summary>Resolves ID_Medic -> display name (Nume Prenume) for a set of consultations.</summary>
+        private async Task<Dictionary<int, string>> BuildDoctorNameMapAsync(IEnumerable<Consultation> consultations, CancellationToken cancellationToken)
+        {
+            var ids = consultations
+                .Where(c => c.DoctorId.HasValue)
+                .Select(c => c.DoctorId!.Value)
+                .Distinct()
+                .ToList();
+
+            if (ids.Count == 0)
+                return new Dictionary<int, string>();
+
+            var users = await _context.Set<User>()
+                .AsNoTracking()
+                .Where(u => ids.Contains(u.UserId))
+                .ToListAsync(cancellationToken);
+
+            return users.ToDictionary(
+                u => u.UserId,
+                u => string.Join(' ', new[] { u.FirstName, u.LastName }.Where(s => !string.IsNullOrWhiteSpace(s))));
         }
 
         public async Task UpdateAsync(int id, UpdateConsultationDto dto, CancellationToken cancellationToken = default)
@@ -166,19 +253,27 @@ namespace Elderlynk.Services
             await _context.SaveChangesAsync(cancellationToken);
         }
 
-        private static ConsultationResponseDto Map(Consultation c) => new()
+        private static ConsultationResponseDto Map(Consultation c, IReadOnlyDictionary<int, string>? doctorNames = null)
         {
-            ConsultationId = c.ConsultationId,
-            PatientId = c.PatientId,
-            DoctorId = c.DoctorId,
-            ConsultationDate = c.ConsultationDate,
-            PresentationReason = c.PresentationReason,
-            Symptoms = c.Symptoms,
-            DiagnosisCode = c.DiagnosisCode,
-            DiagnosticText = c.DiagnosticText,
-            Referrals = c.Referrals,
-            GeneratedPrescriptions = c.GeneratedPrescriptions,
-            Notes = c.Notes
-        };
+            string? doctorName = null;
+            if (c.DoctorId.HasValue && doctorNames != null && doctorNames.TryGetValue(c.DoctorId.Value, out var name))
+                doctorName = string.IsNullOrWhiteSpace(name) ? null : name;
+
+            return new ConsultationResponseDto
+            {
+                ConsultationId = c.ConsultationId,
+                PatientId = c.PatientId,
+                DoctorId = c.DoctorId,
+                DoctorName = doctorName,
+                ConsultationDate = c.ConsultationDate,
+                PresentationReason = c.PresentationReason,
+                Symptoms = c.Symptoms,
+                DiagnosisCode = c.DiagnosisCode,
+                DiagnosticText = c.DiagnosticText,
+                Referrals = c.Referrals,
+                GeneratedPrescriptions = c.GeneratedPrescriptions,
+                Notes = c.Notes
+            };
+        }
     }
 }

@@ -53,6 +53,34 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        [HttpGet("{id}/recommendations")]
+        public async Task<ActionResult<IEnumerable<MedicalRecommendationResponseDto>>> GetRecommendations(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetRecommendationsAsync(id, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving recommendations for consultation {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("{id}/medications")]
+        public async Task<ActionResult<IEnumerable<MedicationSchemeResponseDto>>> GetMedications(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetMedicationsAsync(id, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving medications for consultation {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
         [HttpPost]
         [Authorize(Roles = "1,2")]
         public async Task<ActionResult<ConsultationResponseDto>> Create(
@@ -63,6 +91,13 @@ namespace Elderlynk.Web.Controllers
             {
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
+
+                // ID_Medic comes from the token: a medic always owns their own consultation;
+                // an admin may target another medic but defaults to themselves.
+                const int RoleMedic = 2;
+                dto.DoctorId = User.GetRole() == RoleMedic
+                    ? User.GetUserId()
+                    : (dto.DoctorId ?? User.GetUserId());
 
                 var result = await _service.CreateAsync(dto, cancellationToken);
                 return CreatedAtAction(nameof(GetById), new { id = result.ConsultationId }, result);

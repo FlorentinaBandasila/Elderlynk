@@ -10,5 +10,7 @@ namespace Elderlynk.Services
         Task<ConsultationResponseDto> CreateAsync(CreateConsultationDto dto, CancellationToken cancellationToken = default);
         Task UpdateAsync(int id, UpdateConsultationDto dto, CancellationToken cancellationToken = default);
         Task DeleteAsync(int id, CancellationToken cancellationToken = default);
+        Task<IEnumerable<MedicalRecommendationResponseDto>> GetRecommendationsAsync(int consultationId, CancellationToken cancellationToken = default);
+        Task<IEnumerable<MedicationSchemeResponseDto>> GetMedicationsAsync(int consultationId, CancellationToken cancellationToken = default);
     }
 }

@@ -60,6 +60,48 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        [HttpGet("{id}/allergies")]
+        public async Task<ActionResult<IEnumerable<AllergyResponseDto>>> GetAllergies(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetAllergiesAsync(id, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving allergies for patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("{id}/history")]
+        public async Task<ActionResult<IEnumerable<MedicalHistoryResponseDto>>> GetHistory(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetHistoryAsync(id, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving medical history for patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("{id}/medications")]
+        public async Task<ActionResult<IEnumerable<MedicationSchemeResponseDto>>> GetMedications(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetMedicationsAsync(id, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving medication schemes for patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
         // Admin (free) and Medic (auto-links to themselves via Consultatii).
         [HttpPost]
         [Authorize(Roles = "1,2")]

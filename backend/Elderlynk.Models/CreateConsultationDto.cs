@@ -12,5 +12,11 @@ namespace Elderlynk.Models
         public string? Referrals { get; set; }
         public string? GeneratedPrescriptions { get; set; }
         public string? Notes { get; set; }
+
+        // ===== Date medicale (optionale, adaugate odata cu consultatia) =====
+        // Alergiile se leaga de pacient; recomandarile si schemele de aceasta consultatie.
+        public List<CreateAllergyDto>? Allergies { get; set; }
+        public List<CreatePatientRecommendationDto>? Recommendations { get; set; }
+        public List<CreateMedicationSchemeDto>? Medications { get; set; }
     }
 }

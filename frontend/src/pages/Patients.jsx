@@ -4,12 +4,23 @@ import { Search, Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
+import RepeatSection, { inputClass } from '@/components/ui/RepeatSection'
 import { alarms } from '@/data/mock'
 import { patientAPI } from '@/services/api'
-import { mapPatientFromAPI, mapPatientToAPI } from '@/services/mappers'
+import { mapPatientFromAPI } from '@/services/mappers'
 import { useAuth, ROLES } from '@/context/AuthContext'
 
 const activeAlarms = alarms.filter(a => a.status === 'Active')
+
+const EMPTY_DEMOGRAPHICS = {
+  lastName: '', firstName: '', cnp: '',
+  street: '', city: '', county: '', postalCode: '',
+  phone: '', email: '', profession: '', workplace: '',
+}
+const EMPTY_ALLERGY = { denumire: '' }
+const EMPTY_HISTORY = { diagnostic: '', tratament: '', dataDiagnostic: '', observatii: '' }
+const EMPTY_RECOMMENDATION = { tipRecomandare: '', descriere: '' }
+const EMPTY_MEDICATION = { denumireMedicament: '', doza: '', frecventaAdministrare: '', durataTratament: '', observatiiIngrijitor: '' }
 
 export default function Patients() {
   const navigate = useNavigate()
@@ -19,7 +30,16 @@ export default function Patients() {
   const [loading, setLoading] = useState(false)
   const [search, setSearch]       = useState('')
   const [showDialog, setShowDialog] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [step, setStep] = useState(1)
   const hasInitialized = React.useRef(false)
+
+  // ===== Add-patient form state =====
+  const [formData, setFormData] = useState({ ...EMPTY_DEMOGRAPHICS })
+  const [allergies, setAllergies] = useState([{ ...EMPTY_ALLERGY }])
+  const [history, setHistory] = useState([{ ...EMPTY_HISTORY }])
+  const [recommendations, setRecommendations] = useState([{ ...EMPTY_RECOMMENDATION }])
+  const [medications, setMedications] = useState([{ ...EMPTY_MEDICATION }])
 
   useEffect(() => {
     if (hasInitialized.current) return
@@ -44,18 +64,6 @@ export default function Patients() {
 
     fetchPatients()
   }, [])
-  const [formData, setFormData] = useState({
-    name: '',
-    age: '',
-    gender: 'Female',
-    room: '',
-    phone: '',
-    email: '',
-    physician: '',
-    diagnoses: '',
-    allergies: '',
-    risk: 'Low'
-  })
 
   const filtered = patients.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -68,43 +76,101 @@ export default function Patients() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleAddPatient = async () => {
-    if (!formData.name || !formData.age || !formData.room) {
-      alert('Vă rugăm completați câmpurile obligatorii: Nume, Vârstă, Cameră')
-      return
-    }
+  // Generic helpers for the repeatable medical sections.
+  const updateRow = (setter, index, field, value) =>
+    setter(prev => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
+  const addRow = (setter, empty) => setter(prev => [...prev, { ...empty }])
+  const removeRow = (setter, index) =>
+    setter(prev => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)))
 
+  const resetForm = () => {
+    setStep(1)
+    setFormData({ ...EMPTY_DEMOGRAPHICS })
+    setAllergies([{ ...EMPTY_ALLERGY }])
+    setHistory([{ ...EMPTY_HISTORY }])
+    setRecommendations([{ ...EMPTY_RECOMMENDATION }])
+    setMedications([{ ...EMPTY_MEDICATION }])
+  }
+
+  const closeDialog = () => {
+    setShowDialog(false)
+    resetForm()
+  }
+
+  const validateDemographics = () => {
+    if (!formData.lastName.trim() || !formData.firstName.trim() || !formData.cnp.trim()) {
+      alert('Vă rugăm completați câmpurile obligatorii: Nume, Prenume, CNP')
+      return false
+    }
+    if (formData.cnp.trim().length !== 13) {
+      alert('CNP-ul trebuie să conțină 13 cifre.')
+      return false
+    }
+    return true
+  }
+
+  const goToStep2 = () => {
+    if (validateDemographics()) setStep(2)
+  }
+
+  // Save with demographics only — the medical step is optional.
+  const handleSaveFromStep1 = () => {
+    if (validateDemographics()) handleAddPatient()
+  }
+
+  const handleAddPatient = async () => {
+    setSubmitting(true)
     try {
-      const newPatientData = {
-        cnp: formData.cnp || Math.random().toString().slice(2, 15),
-        age: parseInt(formData.age),
-        adresa_Strada: formData.name,
-        adresa_Oras: formData.room,
-        adresa_Judet: formData.room,
-        profesie: formData.profession || '',
-        loc_Munca: formData.workplace || '',
+      const t = (v) => (v ? v.trim() : '')
+      const orNull = (v) => (t(v) ? t(v) : null)
+
+      const payload = {
+        lastName: t(formData.lastName),
+        firstName: t(formData.firstName),
+        cnp: t(formData.cnp),
+        street: t(formData.street),
+        city: t(formData.city),
+        county: t(formData.county),
+        postalCode: t(formData.postalCode),
+        phone: t(formData.phone),
+        email: t(formData.email),
+        profession: t(formData.profession),
+        workPlace: t(formData.workplace),
+        allergies: allergies
+          .filter(a => t(a.denumire))
+          .map(a => ({ denumire: t(a.denumire) })),
+        medicalHistory: history
+          .filter(h => t(h.diagnostic))
+          .map(h => ({
+            diagnostic: t(h.diagnostic),
+            tratament: orNull(h.tratament),
+            dataDiagnostic: h.dataDiagnostic || null,
+            observatii: orNull(h.observatii),
+          })),
+        recommendations: recommendations
+          .filter(r => t(r.descriere))
+          .map(r => ({ tipRecomandare: orNull(r.tipRecomandare), descriere: t(r.descriere) })),
+        medications: medications
+          .filter(m => t(m.denumireMedicament) && t(m.doza))
+          .map(m => ({
+            denumireMedicament: t(m.denumireMedicament),
+            doza: t(m.doza),
+            frecventaAdministrare: orNull(m.frecventaAdministrare),
+            durataTratament: orNull(m.durataTratament),
+            observatiiIngrijitor: orNull(m.observatiiIngrijitor),
+          })),
       }
 
-      const response = await patientAPI.create(newPatientData)
+      const response = await patientAPI.create(payload)
       const newPatient = mapPatientFromAPI(response)
 
       setPatients(prev => [...prev, newPatient])
-      setShowDialog(false)
-      setFormData({
-        name: '',
-        age: '',
-        gender: 'Female',
-        room: '',
-        phone: '',
-        email: '',
-        physician: '',
-        diagnoses: '',
-        allergies: '',
-        risk: 'Low'
-      })
+      closeDialog()
     } catch (error) {
       console.error('Error creating patient:', error)
       alert('Eroare la crearea pacientului')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -117,7 +183,7 @@ export default function Patients() {
         </div>
         {canAddPatient && (
           <button
-            onClick={() => setShowDialog(true)}
+            onClick={() => { resetForm(); setShowDialog(true) }}
             className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium text-sm text-white cursor-pointer hover:opacity-90 transition-opacity"
             style={{ backgroundColor: '#0f4c81' }}
           >
@@ -215,161 +281,157 @@ export default function Patients() {
         </div>
       </Card>
 
-      <Dialog open={showDialog} onClose={() => setShowDialog(false)} title="Adaugă Pacient Nou" maxWidth="max-w-2xl">
-        <DialogBody className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Nume *
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                placeholder="Introduceti numele pacientului"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Vârstă *
-              </label>
-              <input
-                type="number"
-                name="age"
-                value={formData.age}
-                onChange={handleInputChange}
-                placeholder="Introduceti varsta"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Gen
-              </label>
-              <select
-                name="gender"
-                value={formData.gender}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              >
-                <option>Female</option>
-                <option>Male</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Cameră *
-              </label>
-              <input
-                type="text"
-                name="room"
-                value={formData.room}
-                onChange={handleInputChange}
-                placeholder="Ex: 204A"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Telefon
-              </label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                placeholder="Ex: +1 (555) 123-4567"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="Ex: patient@mail.com"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Medic Physician
-              </label>
-              <input
-                type="text"
-                name="physician"
-                value={formData.physician}
-                onChange={handleInputChange}
-                placeholder="Ex: Dr. Sarah Chen"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Diagnostice (separate prin virgulă)
-              </label>
-              <input
-                type="text"
-                name="diagnoses"
-                value={formData.diagnoses}
-                onChange={handleInputChange}
-                placeholder="Ex: CHF Stage III, T2 Diabetes"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Alergii (separate prin virgulă)
-              </label>
-              <input
-                type="text"
-                name="allergies"
-                value={formData.allergies}
-                onChange={handleInputChange}
-                placeholder="Ex: Penicillin, Sulfa drugs"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Nivel de Risc
-              </label>
-              <select
-                name="risk"
-                value={formData.risk}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              >
-                <option>Low</option>
-                <option>Medium</option>
-                <option>High</option>
-                <option>Critical</option>
-              </select>
-            </div>
+      <Dialog
+        open={showDialog}
+        onClose={closeDialog}
+        title={step === 1 ? 'Adaugă Pacient · Date demografice' : 'Adaugă Pacient · Date medicale'}
+        maxWidth="max-w-3xl"
+      >
+        <DialogBody className="space-y-5">
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <span className={`px-3 py-1 rounded-full ${step === 1 ? 'text-white' : 'text-slate-500 bg-slate-100'}`} style={step === 1 ? { backgroundColor: '#0f4c81' } : {}}>1 · Date demografice</span>
+            <span className="text-slate-300">→</span>
+            <span className={`px-3 py-1 rounded-full ${step === 2 ? 'text-white' : 'text-slate-500 bg-slate-100'}`} style={step === 2 ? { backgroundColor: '#0f4c81' } : {}}>2 · Date medicale</span>
           </div>
+
+          {step === 1 ? (
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Nume *" name="lastName" value={formData.lastName} onChange={handleInputChange} placeholder="Ex: Popescu" />
+              <Field label="Prenume *" name="firstName" value={formData.firstName} onChange={handleInputChange} placeholder="Ex: Ion" />
+              <Field label="CNP *" name="cnp" value={formData.cnp} onChange={handleInputChange} placeholder="13 cifre" />
+              <Field label="Telefon" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} placeholder="Ex: 0712 345 678" />
+              <Field label="Email" name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="Ex: pacient@mail.com" />
+              <Field label="Profesie" name="profession" value={formData.profession} onChange={handleInputChange} placeholder="Ex: Inginer" />
+              <Field label="Loc de muncă" name="workplace" value={formData.workplace} onChange={handleInputChange} placeholder="Ex: SC Exemplu SRL" />
+              <div className="col-span-2 pt-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">Adresă</div>
+              <Field label="Stradă" name="street" value={formData.street} onChange={handleInputChange} placeholder="Ex: Str. Florilor nr. 10" />
+              <Field label="Oraș" name="city" value={formData.city} onChange={handleInputChange} placeholder="Ex: Cluj-Napoca" />
+              <Field label="Județ" name="county" value={formData.county} onChange={handleInputChange} placeholder="Ex: Cluj" />
+              <Field label="Cod poștal" name="postalCode" value={formData.postalCode} onChange={handleInputChange} placeholder="Ex: 400001" />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Alergii */}
+              <RepeatSection
+                title="Alergii"
+                rows={allergies}
+                onAdd={() => addRow(setAllergies, EMPTY_ALLERGY)}
+                onRemove={(i) => removeRow(setAllergies, i)}
+                renderRow={(row, i) => (
+                  <input
+                    className={inputClass}
+                    placeholder="Ex: Penicilină"
+                    value={row.denumire}
+                    onChange={e => updateRow(setAllergies, i, 'denumire', e.target.value)}
+                  />
+                )}
+              />
+
+              {/* Istoric medical */}
+              <RepeatSection
+                title="Istoric medical (diagnostice și tratamente)"
+                rows={history}
+                onAdd={() => addRow(setHistory, EMPTY_HISTORY)}
+                onRemove={(i) => removeRow(setHistory, i)}
+                renderRow={(row, i) => (
+                  <div className="grid grid-cols-2 gap-3">
+                    <input className={inputClass} placeholder="Diagnostic *" value={row.diagnostic}
+                      onChange={e => updateRow(setHistory, i, 'diagnostic', e.target.value)} />
+                    <input className={inputClass} placeholder="Tratament" value={row.tratament}
+                      onChange={e => updateRow(setHistory, i, 'tratament', e.target.value)} />
+                    <input className={inputClass} type="date" value={row.dataDiagnostic}
+                      onChange={e => updateRow(setHistory, i, 'dataDiagnostic', e.target.value)} />
+                    <input className={inputClass} placeholder="Observații" value={row.observatii}
+                      onChange={e => updateRow(setHistory, i, 'observatii', e.target.value)} />
+                  </div>
+                )}
+              />
+
+              {/* Recomandări medicale */}
+              <RepeatSection
+                title="Recomandări medicale"
+                rows={recommendations}
+                onAdd={() => addRow(setRecommendations, EMPTY_RECOMMENDATION)}
+                onRemove={(i) => removeRow(setRecommendations, i)}
+                renderRow={(row, i) => (
+                  <div className="grid grid-cols-2 gap-3">
+                    <input className={inputClass} placeholder="Tip recomandare" value={row.tipRecomandare}
+                      onChange={e => updateRow(setRecommendations, i, 'tipRecomandare', e.target.value)} />
+                    <input className={inputClass} placeholder="Descriere *" value={row.descriere}
+                      onChange={e => updateRow(setRecommendations, i, 'descriere', e.target.value)} />
+                  </div>
+                )}
+              />
+
+              {/* Scheme de medicație */}
+              <RepeatSection
+                title="Scheme de medicație"
+                rows={medications}
+                onAdd={() => addRow(setMedications, EMPTY_MEDICATION)}
+                onRemove={(i) => removeRow(setMedications, i)}
+                renderRow={(row, i) => (
+                  <div className="grid grid-cols-2 gap-3">
+                    <input className={inputClass} placeholder="Denumire medicament *" value={row.denumireMedicament}
+                      onChange={e => updateRow(setMedications, i, 'denumireMedicament', e.target.value)} />
+                    <input className={inputClass} placeholder="Doză *" value={row.doza}
+                      onChange={e => updateRow(setMedications, i, 'doza', e.target.value)} />
+                    <input className={inputClass} placeholder="Frecvență administrare" value={row.frecventaAdministrare}
+                      onChange={e => updateRow(setMedications, i, 'frecventaAdministrare', e.target.value)} />
+                    <input className={inputClass} placeholder="Durată tratament" value={row.durataTratament}
+                      onChange={e => updateRow(setMedications, i, 'durataTratament', e.target.value)} />
+                    <input className={`${inputClass} col-span-2`} placeholder="Observații îngrijitor" value={row.observatiiIngrijitor}
+                      onChange={e => updateRow(setMedications, i, 'observatiiIngrijitor', e.target.value)} />
+                  </div>
+                )}
+              />
+              <p className="text-xs text-slate-400">
+                Vârsta este calculată automat din CNP. Câmpurile marcate cu * sunt obligatorii pentru a salva rândul.
+              </p>
+            </div>
+          )}
         </DialogBody>
         <DialogFooter>
-          <button
-            onClick={() => setShowDialog(false)}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
-          >
-            Anulează
-          </button>
-          <button
-            onClick={handleAddPatient}
-            className="px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
-            style={{ backgroundColor: '#0f4c81' }}
-          >
-            Adaugă Pacient
-          </button>
+          {step === 1 ? (
+            <>
+              <button onClick={closeDialog} className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer">
+                Anulează
+              </button>
+              <button onClick={handleSaveFromStep1} disabled={submitting} className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors cursor-pointer disabled:opacity-60" style={{ color: '#0f4c81', borderColor: '#0f4c81' }}>
+                {submitting ? 'Se salvează...' : 'Salvează fără date medicale'}
+              </button>
+              <button onClick={goToStep2} className="px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 transition-opacity cursor-pointer" style={{ backgroundColor: '#0f4c81' }}>
+                Continuă →
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setStep(1)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer">
+                ← Înapoi
+              </button>
+              <button onClick={handleAddPatient} disabled={submitting} className="px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60" style={{ backgroundColor: '#0f4c81' }}>
+                {submitting ? 'Se salvează...' : 'Adaugă Pacient'}
+              </button>
+            </>
+          )}
         </DialogFooter>
       </Dialog>
+    </div>
+  )
+}
+
+function Field({ label, name, value, onChange, placeholder, type = 'text' }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={inputClass}
+      />
     </div>
   )
 }

@@ -81,6 +81,9 @@ export const patientAPI = {
   create: (data) => request('/Patients', { method: 'POST', body: data }),
   update: (id, data) => request(`/Patients/${id}`, { method: 'PUT', body: data }),
   delete: (id) => request(`/Patients/${id}`, { method: 'DELETE' }),
+  getAllergies: (id) => request(`/Patients/${id}/allergies`),
+  getHistory: (id) => request(`/Patients/${id}/history`),
+  getMedications: (id) => request(`/Patients/${id}/medications`),
 }
 
 // ============ ALARMS ============
@@ -99,6 +102,8 @@ export const consultationAPI = {
   create: (data) => request('/consultations', { method: 'POST', body: data }),
   update: (id, data) => request(`/consultations/${id}`, { method: 'PUT', body: data }),
   delete: (id) => request(`/consultations/${id}`, { method: 'DELETE' }),
+  getRecommendations: (id) => request(`/consultations/${id}/recommendations`),
+  getMedications: (id) => request(`/consultations/${id}/medications`),
 }
 
 // ============ DEVICES ============

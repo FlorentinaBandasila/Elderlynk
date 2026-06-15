@@ -6,7 +6,7 @@ import {
 import { Card, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
-import { patientAPI, consultationAPI, deviceAPI, userAPI, medicalRecommendationAPI } from '@/services/api'
+import { patientAPI, consultationAPI, deviceAPI, medicalRecommendationAPI } from '@/services/api'
 import { mapPatientFromAPI, mapConsultationFromAPI, mapDeviceFromAPI } from '@/services/mappers'
 
 const consultVariant = { Scheduled: 'blue', 'In Progress': 'cyan', Completed: 'green', Cancelled: 'gray' }
@@ -23,9 +23,11 @@ export default function PatientDetail() {
   const [consultations, setConsultations] = useState([])
   const [devices, setDevices] = useState([])
   const [medicalRecommendations, setMedicalRecommendations] = useState([])
+  const [allergies, setAllergies] = useState([])
+  const [history, setHistory] = useState([])
+  const [medications, setMedications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [doctorNames, setDoctorNames] = useState({})
   const effectRan = useRef(false)
 
   useEffect(() => {
@@ -77,31 +79,21 @@ export default function PatientDetail() {
           setMedicalRecommendations([])
         }
 
-        // Fetch doctor names
+        // Fetch allergies, medical history and medication schemes
         try {
-          const doctorIds = new Set()
-          if (consultationsResponse && consultationsResponse.length > 0) {
-            consultationsResponse.forEach(c => {
-              if (c.doctorId) doctorIds.add(c.doctorId)
-            })
-          }
-
-          const names = {}
-          for (const docId of doctorIds) {
-            try {
-              const doctorData = await userAPI.getById(docId)
-              const firstName = doctorData.FirstName || doctorData.firstName || ''
-              const lastName = doctorData.LastName || doctorData.lastName || ''
-              names[docId] = [firstName, lastName].filter(Boolean).join(' ') || 'Necunoscut'
-            } catch (err) {
-              console.error(`Error fetching doctor ${docId}:`, err)
-              names[docId] = 'Necunoscut'
-            }
-          }
-          setDoctorNames(names)
+          const [allergiesRes, historyRes, medicationsRes] = await Promise.all([
+            patientAPI.getAllergies(patientId).catch(() => []),
+            patientAPI.getHistory(patientId).catch(() => []),
+            patientAPI.getMedications(patientId).catch(() => []),
+          ])
+          setAllergies(Array.isArray(allergiesRes) ? allergiesRes : [])
+          setHistory(Array.isArray(historyRes) ? historyRes : [])
+          setMedications(Array.isArray(medicationsRes) ? medicationsRes : [])
         } catch (err) {
-          console.error('Error fetching doctor names:', err)
+          console.error('Error fetching medical data:', err)
         }
+        // Doctor names now come from the consultation API (mapped to `physician`),
+        // so no extra per-doctor lookup is needed.
       } catch (err) {
         console.error('Error fetching patient:', err)
         setError(err.message)
@@ -121,6 +113,15 @@ export default function PatientDetail() {
     <div className="p-10 text-center text-slate-500">Pacientul nu a fost găsit.</div>
   )
 
+
+  const diagnosisList = history.map(h => h.diagnostic).filter(Boolean)
+  const allergyList = allergies.map(a => a.denumire).filter(Boolean)
+
+  // Owning medic = the doctor on the patient's consultations.
+  const physicianName =
+    consultations.map(c => c.doctorName || c.physician).find(Boolean) ||
+    patient.physician ||
+    'Necunoscut'
 
   const vitals = patient.vitals ? [
     {
@@ -174,11 +175,11 @@ export default function PatientDetail() {
                     <span>·</span>
                     <span>{patient.age} ani, {patient.gender}</span>
                     <span>·</span>
-                    <span>Salon {patient.room}</span>
+                    <span>{patient.room}</span>
                     <span>·</span>
                     <span className="flex items-center gap-1">
                       <Stethoscope size={13} style={{ color: '#0f4c81' }} />
-                      <span style={{ color: '#0f4c81' }}>{patient.physician || 'Necunoscut'}</span>
+                      <span style={{ color: '#0f4c81' }}>{physicianName}</span>
                     </span>
                   </div>
                 </div>
@@ -199,14 +200,14 @@ export default function PatientDetail() {
                   <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">
                     Diagnostic Principal
                   </div>
-                  <div className="text-slate-700 font-medium">{patient.diagnoses[0]}</div>
+                  <div className="text-slate-700 font-medium">{diagnosisList[0] || 'Niciun diagnostic'}</div>
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">
                     Secundar
                   </div>
                   <div className="text-slate-500 text-sm">
-                    {patient.diagnoses.slice(1).join(', ') || 'Niciunu'}
+                    {diagnosisList.slice(1).join(', ') || 'Niciunu'}
                   </div>
                 </div>
                 <div>
@@ -215,9 +216,9 @@ export default function PatientDetail() {
                   </div>
                   <div
                     className="text-sm font-medium"
-                    style={{ color: patient.allergies.length > 0 ? '#e63946' : '#94a3b8' }}
+                    style={{ color: allergyList.length > 0 ? '#e63946' : '#94a3b8' }}
                   >
-                    {patient.allergies.length > 0 ? patient.allergies.join(', ') : 'Niciuna cunoscută'}
+                    {allergyList.length > 0 ? allergyList.join(', ') : 'Niciuna cunoscută'}
                   </div>
                 </div>
               </div>
@@ -338,7 +339,7 @@ export default function PatientDetail() {
                       <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50">
                         <td className="py-3 pr-4 font-medium text-slate-700 text-sm">{c.type}</td>
                         <td className="py-3 pr-4 text-slate-500 text-sm">{c.date} {c.time}</td>
-                        <td className="py-3 pr-4 text-slate-500 text-sm">{doctorNames[c.doctorId] || c.physician || 'Necunoscut'}</td>
+                        <td className="py-3 pr-4 text-slate-500 text-sm">{c.doctorName || c.physician || 'Necunoscut'}</td>
                         <td className="py-3">
                           <Badge variant={consultVariant[c.status] || 'gray'}>{c.status}</Badge>
                         </td>
@@ -346,6 +347,70 @@ export default function PatientDetail() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Istoric Medical */}
+          <Card>
+            <CardBody>
+              <h3 className="text-base font-bold text-slate-700 mb-4">Istoric Medical</h3>
+              <div className="space-y-3">
+                {history.length === 0 && (
+                  <p className="text-sm text-slate-400">Niciun istoric medical înregistrat.</p>
+                )}
+                {history.map(h => (
+                  <div key={h.historyId} className="p-3 rounded-xl" style={{ backgroundColor: '#f8fafc' }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm font-semibold text-slate-700">{h.diagnostic}</div>
+                      {h.dataDiagnostic && (
+                        <span className="text-xs text-slate-400 flex-shrink-0">
+                          {new Date(h.dataDiagnostic).toLocaleDateString('ro-RO')}
+                        </span>
+                      )}
+                    </div>
+                    {h.tratament && (
+                      <div className="text-xs text-slate-500 mt-1"><span className="font-medium">Tratament:</span> {h.tratament}</div>
+                    )}
+                    {h.observatii && (
+                      <div className="text-xs text-slate-400 mt-0.5">{h.observatii}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Scheme de Medicație */}
+          <Card>
+            <CardBody>
+              <h3 className="text-base font-bold text-slate-700 mb-4">Scheme de Medicație</h3>
+              <div className="space-y-3">
+                {medications.length === 0 && (
+                  <p className="text-sm text-slate-400">Nicio schemă de medicație înregistrată.</p>
+                )}
+                {medications.map(m => (
+                  <div key={m.medicationId} className="p-3 rounded-xl" style={{ backgroundColor: '#f8fafc' }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm font-semibold text-slate-700">
+                        {m.denumireMedicament} <span className="text-slate-500 font-normal">· {m.doza}</span>
+                      </div>
+                      {m.dataPrescriere && (
+                        <span className="text-xs text-slate-400 flex-shrink-0">
+                          {new Date(m.dataPrescriere).toLocaleDateString('ro-RO')}
+                        </span>
+                      )}
+                    </div>
+                    {(m.frecventaAdministrare || m.durataTratament) && (
+                      <div className="text-xs text-slate-500 mt-1">
+                        {[m.frecventaAdministrare, m.durataTratament].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                    {m.observatiiIngrijitor && (
+                      <div className="text-xs text-slate-400 mt-0.5">{m.observatiiIngrijitor}</div>
+                    )}
+                  </div>
+                ))}
               </div>
             </CardBody>
           </Card>
@@ -382,7 +447,7 @@ export default function PatientDetail() {
                         </div>
                         <div className="text-xs text-slate-500 mt-0.5">{c.presentationReason || 'Consultație medicală'}</div>
                         <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                          <User size={10} /> {doctorNames[c.doctorId] || c.physician || 'Medic necunoscut'}
+                          <User size={10} /> {c.doctorName || c.physician || 'Medic necunoscut'}
                         </div>
                       </div>
                     </div>
