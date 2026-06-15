@@ -14,6 +14,7 @@ import SensorConfig from '@/pages/SensorConfig'
 import LiveAlarms from '@/pages/LiveAlarms'
 import Notifications from '@/pages/Notifications'
 import Settings from '@/pages/Settings'
+import Ajutor from '@/pages/Ajutor'
 
 export const DarkModeContext = createContext()
 
@@ -50,6 +51,7 @@ export default function App() {
               <Route path="/live-alarms"   element={<LiveAlarms />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/settings"      element={<Settings />} />
+              <Route path="/ajutor"        element={<Ajutor />} />
 
               {/* Admin-only */}
               <Route

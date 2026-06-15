@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Stethoscope, Radio,
   Bell, BellRing, Settings, ChevronLeft, ChevronRight, Activity,
-  UserPlus, LogOut,
+  UserPlus, LogOut, HelpCircle,
 } from 'lucide-react'
 import { notifications, alarms } from '@/data/mock'
 import { useAuth, ROLES, ROLE_LABELS } from '@/context/AuthContext'
@@ -33,8 +33,9 @@ const navGroups = [
   {
     label: 'General',
     items: [
-      { to: '/notifications', icon: BellRing, label: 'Notificări' },
-      { to: '/settings',      icon: Settings,  label: 'Setări' },
+      { to: '/notifications', icon: BellRing,    label: 'Notificări' },
+      { to: '/settings',      icon: Settings,    label: 'Setări' },
+      { to: '/ajutor',        icon: HelpCircle,  label: 'Ajutor' },
     ],
   },
 ]
