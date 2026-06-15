@@ -84,6 +84,13 @@ export const patientAPI = {
   getAllergies: (id) => request(`/Patients/${id}/allergies`),
   getHistory: (id) => request(`/Patients/${id}/history`),
   getMedications: (id) => request(`/Patients/${id}/medications`),
+  getActivity: (id) => request(`/Patients/${id}/activity`),
+  updateAllergy: (allergyId, data) => request(`/Patients/allergies/${allergyId}`, { method: 'PUT', body: data }),
+  deleteAllergy: (allergyId) => request(`/Patients/allergies/${allergyId}`, { method: 'DELETE' }),
+  updateHistory: (historyId, data) => request(`/Patients/history/${historyId}`, { method: 'PUT', body: data }),
+  deleteHistory: (historyId) => request(`/Patients/history/${historyId}`, { method: 'DELETE' }),
+  updateMedication: (medicationId, data) => request(`/Patients/medications/${medicationId}`, { method: 'PUT', body: data }),
+  deleteMedication: (medicationId) => request(`/Patients/medications/${medicationId}`, { method: 'DELETE' }),
 }
 
 // ============ ALARMS ============
@@ -146,6 +153,9 @@ export const recommendationAPI = {
 export const medicalRecommendationAPI = {
   getAll: () => request('/medicalrecommendations'),
   getByPatientId: (patientId) => request(`/medicalrecommendations/patient/${patientId}`),
+  create: (data) => request('/medicalrecommendations', { method: 'POST', body: data }),
+  update: (id, data) => request(`/medicalrecommendations/${id}`, { method: 'PUT', body: data }),
+  delete: (id) => request(`/medicalrecommendations/${id}`, { method: 'DELETE' }),
 }
 
 // ============ ROLES ============

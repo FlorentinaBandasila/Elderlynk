@@ -23,5 +23,19 @@ namespace Elderlynk.Services
         Task<IEnumerable<AllergyResponseDto>> GetAllergiesAsync(int patientId, CancellationToken cancellationToken = default);
         Task<IEnumerable<MedicalHistoryResponseDto>> GetHistoryAsync(int patientId, CancellationToken cancellationToken = default);
         Task<IEnumerable<MedicationSchemeResponseDto>> GetMedicationsAsync(int patientId, CancellationToken cancellationToken = default);
+
+        Task<PatientResponseDto?> UpdateAsync(int id, UpdatePatientDto dto, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+        Task<bool> DeleteAsync(int id, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+
+        Task<bool> UpdateAllergyAsync(int allergyId, CreateAllergyDto dto, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+        Task<bool> DeleteAllergyAsync(int allergyId, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+
+        Task<bool> UpdateHistoryAsync(int historyId, CreateMedicalHistoryDto dto, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+        Task<bool> DeleteHistoryAsync(int historyId, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+
+        Task<bool> UpdateMedicationAsync(int medicationId, CreateMedicationSchemeDto dto, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+        Task<bool> DeleteMedicationAsync(int medicationId, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
+
+        Task<IEnumerable<AuditLogResponseDto>> GetActivityAsync(int patientId, CancellationToken cancellationToken = default);
     }
 }

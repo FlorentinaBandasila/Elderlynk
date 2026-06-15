@@ -13,6 +13,9 @@ namespace Elderlynk.Models
         [Column("ID_Utilizator")]
         public int? UserId { get; set; }
 
+        [Column("ID_Pacient")]
+        public int? PatientId { get; set; }
+
         [Column("Actiune")]
         [MaxLength(100)]
         public string? Action { get; set; }
@@ -27,5 +30,8 @@ namespace Elderlynk.Models
         [Column("IP_Sursa")]
         [MaxLength(45)]
         public string? SourceIp { get; set; }
+
+        [Column("Detalii")]
+        public string? Details { get; set; }
     }
 }

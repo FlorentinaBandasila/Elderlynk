@@ -130,5 +130,85 @@ namespace Elderlynk.Web.Controllers
                 return StatusCode(500, errorMessage);
             }
         }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<ActionResult<PatientResponseDto>> Update(int id, [FromBody] UpdatePatientDto dto, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var updated = await _service.UpdateAsync(id, dto, User.GetUserId(), Ip(), cancellationToken);
+                return updated == null ? NotFound() : Ok(updated);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var ok = await _service.DeleteAsync(id, User.GetUserId(), Ip(), cancellationToken);
+                return ok ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("{id}/activity")]
+        public async Task<ActionResult<IEnumerable<AuditLogResponseDto>>> GetActivity(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetActivityAsync(id, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving activity for patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        // ===== Medical item edit/delete (roles 1,2) =====
+
+        [HttpPut("allergies/{allergyId}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<IActionResult> UpdateAllergy(int allergyId, [FromBody] CreateAllergyDto dto, CancellationToken cancellationToken)
+            => await _service.UpdateAllergyAsync(allergyId, dto, User.GetUserId(), Ip(), cancellationToken) ? NoContent() : NotFound();
+
+        [HttpDelete("allergies/{allergyId}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<IActionResult> DeleteAllergy(int allergyId, CancellationToken cancellationToken)
+            => await _service.DeleteAllergyAsync(allergyId, User.GetUserId(), Ip(), cancellationToken) ? NoContent() : NotFound();
+
+        [HttpPut("history/{historyId}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<IActionResult> UpdateHistory(int historyId, [FromBody] CreateMedicalHistoryDto dto, CancellationToken cancellationToken)
+            => await _service.UpdateHistoryAsync(historyId, dto, User.GetUserId(), Ip(), cancellationToken) ? NoContent() : NotFound();
+
+        [HttpDelete("history/{historyId}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<IActionResult> DeleteHistory(int historyId, CancellationToken cancellationToken)
+            => await _service.DeleteHistoryAsync(historyId, User.GetUserId(), Ip(), cancellationToken) ? NoContent() : NotFound();
+
+        [HttpPut("medications/{medicationId}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<IActionResult> UpdateMedication(int medicationId, [FromBody] CreateMedicationSchemeDto dto, CancellationToken cancellationToken)
+            => await _service.UpdateMedicationAsync(medicationId, dto, User.GetUserId(), Ip(), cancellationToken) ? NoContent() : NotFound();
+
+        [HttpDelete("medications/{medicationId}")]
+        [Authorize(Roles = "1,2")]
+        public async Task<IActionResult> DeleteMedication(int medicationId, CancellationToken cancellationToken)
+            => await _service.DeleteMedicationAsync(medicationId, User.GetUserId(), Ip(), cancellationToken) ? NoContent() : NotFound();
+
+        private string? Ip() => HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 }

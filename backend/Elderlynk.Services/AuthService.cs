@@ -133,7 +133,7 @@ namespace Elderlynk.Services
                 ConsultationDate = DateTime.Now,
                 PresentationReason = dto.PresentationReason ?? "Înregistrare pacient"
             });
-            AuditHelper.Add(_context, medicUserId, "REGISTER_PATIENT", "Pacienti", sourceIp);
+            AuditHelper.Add(_context, medicUserId, "REGISTER_PATIENT", "Pacienti", sourceIp, patient.PatientId);
             await _context.SaveChangesAsync(cancellationToken);
 
             return patient.PatientId;
