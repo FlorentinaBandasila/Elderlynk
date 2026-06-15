@@ -22,6 +22,7 @@ builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ISensorMeasurementService, SensorMeasurementService>();
 builder.Services.AddScoped<IHL7MessageService, HL7MessageService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<IMedicalRecommendationService, MedicalRecommendationService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<ISensorConfigService, SensorConfigService>();
 builder.Services.AddScoped<IUserRoleService, UserRoleService>();

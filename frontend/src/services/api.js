@@ -137,6 +137,12 @@ export const recommendationAPI = {
   delete: (id) => request(`/recommendations/${id}`, { method: 'DELETE' }),
 }
 
+// ============ RECOMANDARI MEDICALE ============
+export const medicalRecommendationAPI = {
+  getAll: () => request('/medicalrecommendations'),
+  getByPatientId: (patientId) => request(`/medicalrecommendations/patient/${patientId}`),
+}
+
 // ============ ROLES ============
 export const roleAPI = {
   getAll: () => request('/roles'),

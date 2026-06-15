@@ -1,16 +1,15 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import {
-  Heart, Wind, Thermometer, Activity, Stethoscope, User
+  Heart, Wind, Thermometer, Activity, Stethoscope, User, ClipboardList
 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
-import { patientAPI, consultationAPI, deviceAPI, userAPI } from '@/services/api'
+import { patientAPI, consultationAPI, deviceAPI, userAPI, medicalRecommendationAPI } from '@/services/api'
 import { mapPatientFromAPI, mapConsultationFromAPI, mapDeviceFromAPI } from '@/services/mappers'
 
 const consultVariant = { Scheduled: 'blue', 'In Progress': 'cyan', Completed: 'green', Cancelled: 'gray' }
-
 
 const activityIconColor = {
   User: '#64748b', Pencil: '#0f4c81', Bell: '#e63946',
@@ -23,6 +22,7 @@ export default function PatientDetail() {
   const [patient, setPatient] = useState(null)
   const [consultations, setConsultations] = useState([])
   const [devices, setDevices] = useState([])
+  const [medicalRecommendations, setMedicalRecommendations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [doctorNames, setDoctorNames] = useState({})
@@ -68,6 +68,15 @@ export default function PatientDetail() {
           setDevices([])
         }
 
+        // Fetch medical recommendations
+        try {
+          const recsResponse = await medicalRecommendationAPI.getByPatientId(patientId)
+          setMedicalRecommendations(Array.isArray(recsResponse) ? recsResponse : [])
+        } catch (err) {
+          console.error('Error fetching medical recommendations:', err)
+          setMedicalRecommendations([])
+        }
+
         // Fetch doctor names
         try {
           const doctorIds = new Set()
@@ -76,19 +85,17 @@ export default function PatientDetail() {
               if (c.doctorId) doctorIds.add(c.doctorId)
             })
           }
-          console.log('Doctor IDs to fetch:', Array.from(doctorIds))
 
           const names = {}
           for (const docId of doctorIds) {
             try {
               const doctorData = await userAPI.getById(docId)
-              console.log(`Doctor ${docId}:`, doctorData)
               const firstName = doctorData.FirstName || doctorData.firstName || ''
               const lastName = doctorData.LastName || doctorData.lastName || ''
-              names[docId] = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown'
+              names[docId] = [firstName, lastName].filter(Boolean).join(' ') || 'Necunoscut'
             } catch (err) {
               console.error(`Error fetching doctor ${docId}:`, err)
-              names[docId] = 'Unknown'
+              names[docId] = 'Necunoscut'
             }
           }
           setDoctorNames(names)
@@ -107,7 +114,7 @@ export default function PatientDetail() {
   }, [id])
 
   if (loading) return (
-    <div className="p-10 text-center text-slate-500">Loading...</div>
+    <div className="p-10 text-center text-slate-500">Se încarcă...</div>
   )
 
   if (!patient) return (
@@ -137,10 +144,10 @@ export default function PatientDetail() {
   return (
     <div className="p-6 space-y-5">
 
-      {/* Title */}
+      {/* Titlu */}
       <h1 className="text-2xl font-bold text-slate-800">Vedere Generală Pacient</h1>
 
-      {/* Header card */}
+      {/* Card antet */}
       <Card>
         <CardBody className="py-5">
           <div className="flex flex-wrap items-start gap-5">
@@ -165,13 +172,13 @@ export default function PatientDetail() {
                   <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-slate-500">
                     <span>ID: {patient.id.replace('p', '').padStart(6, '0')}</span>
                     <span>·</span>
-                    <span>{patient.age} y/o {patient.gender}</span>
+                    <span>{patient.age} ani, {patient.gender}</span>
                     <span>·</span>
-                    <span>Room {patient.room}</span>
+                    <span>Salon {patient.room}</span>
                     <span>·</span>
                     <span className="flex items-center gap-1">
                       <Stethoscope size={13} style={{ color: '#0f4c81' }} />
-                      <span style={{ color: '#0f4c81' }}>{patient.physician || 'Unknown'}</span>
+                      <span style={{ color: '#0f4c81' }}>{patient.physician || 'Necunoscut'}</span>
                     </span>
                   </div>
                 </div>
@@ -183,7 +190,7 @@ export default function PatientDetail() {
                     backgroundColor: '#f0fdf4',
                   }}
                 >
-                  {patient.status === 'Admitted' ? 'Stable' : 'Outpatient'}
+                  {patient.status === 'Admitted' ? 'Stabil' : 'Ambulator'}
                 </span>
               </div>
 
@@ -221,11 +228,10 @@ export default function PatientDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* Left: vitals + 24h trends + sensors + consults */}
+        {/* Stânga: semne vitale + tendințe + senzori + consultații */}
         <div className="lg:col-span-2 space-y-5">
 
-
-          {/* Current Vitals */}
+          {/* Semne Vitale Actuale */}
           {vitals.length > 0 && (
             <div>
               <h3
@@ -266,26 +272,26 @@ export default function PatientDetail() {
             </div>
           )}
 
-          {/* 24h Trends placeholder */}
+          {/* Tendințe 24h */}
           <Card>
             <CardBody className="py-5">
-              <h3 className="text-base font-bold text-slate-700 mb-4">24h Vital Trends</h3>
+              <h3 className="text-base font-bold text-slate-700 mb-4">Tendințe Vitale 24h</h3>
               <div
                 className="flex items-center justify-center rounded-lg text-sm text-slate-400"
                 style={{ height: '120px', backgroundColor: '#f8fafc' }}
               >
-                No history available.
+                Niciun istoric disponibil.
               </div>
             </CardBody>
           </Card>
 
-          {/* Sensors */}
+          {/* Senzori */}
           <Card>
             <CardBody>
-              <h3 className="text-base font-bold text-slate-700 mb-4">Sensor Readings</h3>
+              <h3 className="text-base font-bold text-slate-700 mb-4">Citiri Senzori</h3>
               <div className="space-y-3">
                 {devices.length === 0 && (
-                  <p className="text-sm text-slate-400">No sensors assigned.</p>
+                  <p className="text-sm text-slate-400">Niciun senzor atribuit.</p>
                 )}
                 {devices.map(s => (
                   <div key={s.id} className="flex items-center justify-between p-3 rounded-xl" style={{ backgroundColor: '#f8fafc' }}>
@@ -297,7 +303,7 @@ export default function PatientDetail() {
                       <Badge variant={s.status === 'Online' ? 'green' : s.status === 'Offline' ? 'red' : 'gray'}>
                         {s.status}
                       </Badge>
-                      <div className="text-xs text-slate-400 mt-1">{s.battery}% battery</div>
+                      <div className="text-xs text-slate-400 mt-1">{s.battery}% baterie</div>
                     </div>
                   </div>
                 ))}
@@ -305,15 +311,15 @@ export default function PatientDetail() {
             </CardBody>
           </Card>
 
-          {/* Consultation History */}
+          {/* Istoric Consultații */}
           <Card>
             <CardBody>
-              <h3 className="text-base font-bold text-slate-700 mb-4">Consultation History</h3>
+              <h3 className="text-base font-bold text-slate-700 mb-4">Istoric Consultații</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100">
-                      {['Type', 'Date', 'Physician', 'Status'].map(h => (
+                      {['Tip', 'Data', 'Medic', 'Status'].map(h => (
                         <th key={h} className="pb-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
                           {h}
                         </th>
@@ -324,7 +330,7 @@ export default function PatientDetail() {
                     {consultations.length === 0 && (
                       <tr>
                         <td colSpan={4} className="py-6 text-center text-slate-400 text-sm">
-                          No consultations recorded.
+                          Nicio consultație înregistrată.
                         </td>
                       </tr>
                     )}
@@ -332,7 +338,7 @@ export default function PatientDetail() {
                       <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50">
                         <td className="py-3 pr-4 font-medium text-slate-700 text-sm">{c.type}</td>
                         <td className="py-3 pr-4 text-slate-500 text-sm">{c.date} {c.time}</td>
-                        <td className="py-3 pr-4 text-slate-500 text-sm">{doctorNames[c.doctorId] || c.physician || 'Unknown'}</td>
+                        <td className="py-3 pr-4 text-slate-500 text-sm">{doctorNames[c.doctorId] || c.physician || 'Necunoscut'}</td>
                         <td className="py-3">
                           <Badge variant={consultVariant[c.status] || 'gray'}>{c.status}</Badge>
                         </td>
@@ -345,42 +351,90 @@ export default function PatientDetail() {
           </Card>
         </div>
 
-        {/* Right: Recent Activity */}
-        <div>
-          <h3
-            className="text-base font-bold mb-3"
-            style={{ color: '#0f4c81' }}
-          >
-            Recent Activity
-          </h3>
-          <Card>
-            <CardBody className="py-3 divide-y divide-slate-50">
-              {consultations.length === 0 ? (
-                <p className="text-sm text-slate-400 py-3">No activity recorded.</p>
-              ) : (
-                consultations.slice(0, 5).map((c, i) => (
-                  <div key={i} className="py-3.5 first:pt-0 last:pb-0 flex items-start gap-3">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ backgroundColor: '#f1f5f9' }}
-                    >
-                      <Stethoscope size={14} style={{ color: '#0891b2' }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="text-sm font-semibold text-slate-700 leading-tight">Consultation</div>
-                        <span className="text-xs text-slate-400 flex-shrink-0 mt-0.5">{c.date}</span>
+        {/* Dreapta: Activitate Recentă + Recomandări */}
+        <div className="space-y-5">
+
+          {/* Activitate Recentă */}
+          <div>
+            <h3
+              className="text-base font-bold mb-3"
+              style={{ color: '#0f4c81' }}
+            >
+              Activitate Recentă
+            </h3>
+            <Card>
+              <CardBody className="py-3 divide-y divide-slate-50">
+                {consultations.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-3">Nicio activitate înregistrată.</p>
+                ) : (
+                  consultations.slice(0, 5).map((c, i) => (
+                    <div key={i} className="py-3.5 first:pt-0 last:pb-0 flex items-start gap-3">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                        style={{ backgroundColor: '#f1f5f9' }}
+                      >
+                        <Stethoscope size={14} style={{ color: '#0891b2' }} />
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5">{c.presentationReason || 'Medical consultation'}</div>
-                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                        <User size={10} /> {doctorNames[c.doctorId] || c.physician || 'Unknown Physician'}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-sm font-semibold text-slate-700 leading-tight">Consultație</div>
+                          <span className="text-xs text-slate-400 flex-shrink-0 mt-0.5">{c.date}</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">{c.presentationReason || 'Consultație medicală'}</div>
+                        <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                          <User size={10} /> {doctorNames[c.doctorId] || c.physician || 'Medic necunoscut'}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </CardBody>
-          </Card>
+                  ))
+                )}
+              </CardBody>
+            </Card>
+          </div>
+
+          {/* Recomandări */}
+          <div>
+            <h3
+              className="text-base font-bold mb-3"
+              style={{ color: '#0f4c81' }}
+            >
+              Recomandări
+            </h3>
+            <Card>
+              <CardBody className="py-3 divide-y divide-slate-50">
+                {medicalRecommendations.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-3">Nicio recomandare înregistrată.</p>
+                ) : (
+                  medicalRecommendations.map((r, i) => (
+                    <div key={i} className="py-3.5 first:pt-0 last:pb-0 flex items-start gap-3">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                        style={{ backgroundColor: '#f1f5f9' }}
+                      >
+                        <ClipboardList size={14} style={{ color: '#16a34a' }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-sm font-semibold text-slate-700 leading-tight">
+                            {r.tipRecomandare || 'Recomandare'}
+                          </div>
+                          <span className="text-xs text-slate-400 flex-shrink-0 mt-0.5">
+                            {r.dataRecomandarii
+                              ? new Date(r.dataRecomandarii).toLocaleDateString('ro-RO')
+                              : ''}
+                          </span>
+                        </div>
+                        {r.descriere && (
+                          <div className="text-xs text-slate-500 mt-0.5">{r.descriere}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardBody>
+            </Card>
+          </div>
+
         </div>
       </div>
     </div>
