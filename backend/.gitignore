@@ -47,13 +47,21 @@ bld/
 *~
 .DS_Store
 
-# Environment
+# Environment & secrets — never commit real credentials or JWT secrets
 .env
 .env.local
 .env.*.local
+appsettings.json
 appsettings.*.json
-!appsettings.Development.json
-!appsettings.json
+!appsettings.example.json
+
+# Certificates / keys
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
 
 # Node modules (if needed for frontend)
 node_modules/

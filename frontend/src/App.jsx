@@ -1,7 +1,11 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useState, useEffect, createContext } from 'react'
+import { AuthProvider, ROLES } from '@/context/AuthContext'
+import ProtectedRoute from '@/components/ProtectedRoute'
 import Layout from '@/components/layout/Layout'
 import Login from '@/pages/Login'
+import Register from '@/pages/Register'
+import Unauthorized from '@/pages/Unauthorized'
 import Dashboard from '@/pages/Dashboard'
 import Patients from '@/pages/Patients'
 import PatientDetail from '@/pages/PatientDetail'
@@ -30,21 +34,36 @@ export default function App() {
 
   return (
     <DarkModeContext.Provider value={{ darkMode, setDarkMode }}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route element={<Layout />}>
-            <Route path="/"              element={<Dashboard />} />
-            <Route path="/patients"      element={<Patients />} />
-            <Route path="/patients/:id"  element={<PatientDetail />} />
-            <Route path="/consultations" element={<Consultations />} />
-            <Route path="/sensor-config" element={<SensorConfig />} />
-            <Route path="/live-alarms"   element={<LiveAlarms />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/settings"      element={<Settings />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
+
+            {/* Everything below requires authentication */}
+            <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+              <Route path="/"              element={<Dashboard />} />
+              <Route path="/patients"      element={<Patients />} />
+              <Route path="/patients/:id"  element={<PatientDetail />} />
+              <Route path="/consultations" element={<Consultations />} />
+              <Route path="/sensor-config" element={<SensorConfig />} />
+              <Route path="/live-alarms"   element={<LiveAlarms />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/settings"      element={<Settings />} />
+
+              {/* Admin-only */}
+              <Route
+                path="/register"
+                element={
+                  <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                    <Register />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </DarkModeContext.Provider>
   )
 }

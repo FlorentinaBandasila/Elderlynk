@@ -5,6 +5,7 @@ namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
     public class ICDController : ControllerBase
     {
         private readonly IICDService _service;

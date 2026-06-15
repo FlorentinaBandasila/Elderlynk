@@ -6,6 +6,7 @@ namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "1")]
     public class RolesController : ControllerBase
     {
         private readonly IRoleService _service;

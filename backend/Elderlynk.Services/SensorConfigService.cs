@@ -5,6 +5,12 @@ namespace Elderlynk.Services
 {
     public class SensorConfigService : ISensorConfigService
     {
+        // Role ids (Roluri): 1=Admin, 2=Medic, 3=Supraveghetor, 4=Pacient
+        private const int RoleAdmin = 1;
+        private const int RoleMedic = 2;
+        private const int RoleSupervisor = 3;
+        private const int RolePatient = 4;
+
         private readonly DbContext _context;
 
         public SensorConfigService(DbContext context)
@@ -34,6 +40,60 @@ namespace Elderlynk.Services
                 UpperAlarmThreshold = c.UpperAlarmThreshold,
                 Active = c.Active
             });
+        }
+
+        public async Task<IEnumerable<SensorConfigResponseDto>> GetForUserAsync(int userId, int role, CancellationToken cancellationToken = default)
+        {
+            // Resolve the set of patient ids this account may see. null = no restriction (Admin).
+            HashSet<int>? visiblePatients;
+            switch (role)
+            {
+                case RoleAdmin:
+                    visiblePatients = null;
+                    break;
+                case RoleMedic:
+                    visiblePatients = (await _context.Set<Consultation>().AsNoTracking()
+                        .Where(c => c.DoctorId == userId && c.PatientId != null)
+                        .Select(c => c.PatientId!.Value)
+                        .Distinct()
+                        .ToListAsync(cancellationToken)).ToHashSet();
+                    break;
+                case RoleSupervisor:
+                    visiblePatients = (await _context.Set<Alarm>().AsNoTracking()
+                        .Where(a => a.SupervisorId == userId && a.PatientId != null)
+                        .Select(a => a.PatientId!.Value)
+                        .Distinct()
+                        .ToListAsync(cancellationToken)).ToHashSet();
+                    break;
+                case RolePatient:
+                    visiblePatients = new HashSet<int> { userId };
+                    break;
+                default:
+                    return Enumerable.Empty<SensorConfigResponseDto>();
+            }
+
+            var sensors = await _context.Set<SensorConfig>().AsNoTracking().ToListAsync(cancellationToken);
+            var deviceToPatient = await _context.Set<Device>().AsNoTracking()
+                .Where(d => d.PatientId != null)
+                .ToDictionaryAsync(d => d.DeviceId, d => d.PatientId!.Value, cancellationToken);
+            var patientNames = await _context.Set<Patient>().AsNoTracking()
+                .ToDictionaryAsync(p => p.PatientId, p => BuildName(p.FirstName, p.LastName), cancellationToken);
+
+            var result = new List<SensorConfigResponseDto>();
+            foreach (var sensor in sensors)
+            {
+                int? patientId = sensor.DeviceId.HasValue && deviceToPatient.TryGetValue(sensor.DeviceId.Value, out var pid)
+                    ? pid
+                    : null;
+
+                if (visiblePatients != null && (patientId == null || !visiblePatients.Contains(patientId.Value)))
+                    continue;
+
+                var patientName = patientId != null && patientNames.TryGetValue(patientId.Value, out var n) ? n : null;
+                result.Add(Map(sensor, patientId, patientName));
+            }
+
+            return result;
         }
 
         public async Task<SensorConfigResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -149,6 +209,31 @@ namespace Elderlynk.Services
 
             _context.Set<SensorConfig>().Remove(config);
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        private static SensorConfigResponseDto Map(SensorConfig c, int? patientId, string? patientName) => new()
+        {
+            SensorId = c.SensorId,
+            DeviceId = c.DeviceId,
+            PatientId = patientId,
+            PatientName = patientName,
+            OrderNumber = c.OrderNumber,
+            Name = c.Name,
+            SensorType = c.SensorType,
+            MeasurementUnit = c.MeasurementUnit,
+            SamplingPeriodSeconds = c.SamplingPeriodSeconds,
+            ScaleFactor = c.ScaleFactor,
+            LowerAlarmThreshold = c.LowerAlarmThreshold,
+            LowerWarningThreshold = c.LowerWarningThreshold,
+            UpperWarningThreshold = c.UpperWarningThreshold,
+            UpperAlarmThreshold = c.UpperAlarmThreshold,
+            Active = c.Active
+        };
+
+        private static string? BuildName(string? first, string? last)
+        {
+            var name = $"{first} {last}".Trim();
+            return string.IsNullOrEmpty(name) ? null : name;
         }
     }
 }

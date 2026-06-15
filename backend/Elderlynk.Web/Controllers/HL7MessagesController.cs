@@ -6,6 +6,7 @@ namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
     public class HL7MessagesController : ControllerBase
     {
         private readonly IHL7MessageService _service;

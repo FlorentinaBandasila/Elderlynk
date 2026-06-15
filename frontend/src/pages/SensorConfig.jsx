@@ -3,9 +3,8 @@ import { Search, Wifi, WifiOff, AlertCircle, Settings2 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
-import { sensors as initialSensors } from '@/data/mock'
-import { sensorConfigAPI, deviceAPI, patientAPI } from '@/services/api'
-import { mapSensorConfigFromAPI, mapSensorConfigToAPI } from '@/services/mappers'
+import { sensorConfigAPI } from '@/services/api'
+import { mapSensorConfigFromAPI } from '@/services/mappers'
 
 function StatusPill({ status }) {
   const cfg = {
@@ -25,12 +24,12 @@ function StatusPill({ status }) {
 }
 
 export default function SensorConfig() {
-  const [sensors, setSensors]       = useState(initialSensors)
+  const [sensors, setSensors]       = useState([])
   const [editSensor, setEditSensor] = useState(null)
   const [form, setForm]             = useState({})
   const [search, setSearch]         = useState('')
   const [patientFilter, setPatient] = useState('All')
-  const [statusFilter, setStatus]   = useState('Online')
+  const [statusFilter, setStatus]   = useState('All')
   const effectRan = useRef(false)
 
   useEffect(() => {
@@ -39,57 +38,16 @@ export default function SensorConfig() {
 
     const fetchData = async () => {
       try {
-        // Fetch sensors
+        // The backend already scopes sensors to the current user (a medic only gets the
+        // sensors of patients they own) and populates patientName for each one.
         const sensorsResponse = await sensorConfigAPI.getAll()
-        if (!sensorsResponse || sensorsResponse.length === 0) return
-
-        // Fetch devices and patients to map patient names
-        let devicesMap = {}
-        let patientsMap = {}
-
-        try {
-          const devicesResponse = await deviceAPI.getAll()
-          if (devicesResponse && Array.isArray(devicesResponse)) {
-            devicesResponse.forEach(d => {
-              const deviceId = d.deviceId || d.DeviceId
-              const patientId = d.patientId || d.PatientId
-              if (deviceId && patientId) {
-                devicesMap[deviceId] = patientId
-              }
-            })
-          }
-        } catch (err) {
-          console.error('Error fetching devices:', err)
-        }
-
-        try {
-          const patientsResponse = await patientAPI.getAll()
-          if (patientsResponse && Array.isArray(patientsResponse)) {
-            patientsResponse.forEach(p => {
-              const patientId = p.patientId || p.PatientId
-              const firstName = p.firstName || p.FirstName || ''
-              const lastName = p.lastName || p.LastName || ''
-              const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown'
-              patientsMap[patientId] = name
-            })
-          }
-        } catch (err) {
-          console.error('Error fetching patients:', err)
-        }
-
-        // Transform sensors and map patient names
-        const transformed = sensorsResponse.map(sensor => {
-          const mapped = mapSensorConfigFromAPI(sensor)
-          const patientId = devicesMap[sensor.deviceId]
-          if (patientId && patientsMap[patientId]) {
-            mapped.patientName = patientsMap[patientId]
-          }
-          return mapped
-        })
-
+        const transformed = Array.isArray(sensorsResponse)
+          ? sensorsResponse.map(mapSensorConfigFromAPI)
+          : []
         setSensors(transformed)
       } catch (error) {
-        console.error('Error fetching data:', error)
+        console.error('Error fetching sensors:', error)
+        setSensors([])
       }
     }
 
@@ -109,7 +67,7 @@ export default function SensorConfig() {
       (s.type || '').toLowerCase().includes(search.toLowerCase()) ||
       (s.patientName || '').toLowerCase().includes(search.toLowerCase())
     const matchPatient = patientFilter === 'All' || s.patientName === patientFilter
-    const matchStatus  = s.status === statusFilter
+    const matchStatus  = statusFilter === 'All' || s.status === statusFilter
     return matchSearch && matchPatient && matchStatus
   })
 
@@ -154,7 +112,7 @@ export default function SensorConfig() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Senzori', value: counts.total,    icon: Settings2, iconColor: '#0f4c81', iconBg: '#dbeafe', status: null },
+          { label: 'Total Senzori', value: counts.total,    icon: Settings2, iconColor: '#0f4c81', iconBg: '#dbeafe', status: 'All' },
           { label: 'Online',        value: counts.Online,   icon: Wifi,      iconColor: '#0369a1', iconBg: '#e0f2fe', status: 'Online' },
           { label: 'Offline',       value: counts.Offline,  icon: WifiOff,   iconColor: '#dc2626', iconBg: '#fee2e2', status: 'Offline' },
         ].map(s => (
@@ -189,11 +147,21 @@ export default function SensorConfig() {
           />
         </div>
         <select
+          value={patientFilter}
+          onChange={e => setPatient(e.target.value)}
+          className="bg-white border border-slate-200 text-slate-600 text-sm rounded-xl px-4 py-2.5 outline-none cursor-pointer"
+        >
+          {patientNames.map(name => (
+            <option key={name} value={name}>{name === 'All' ? 'Toți pacienții' : name}</option>
+          ))}
+        </select>
+        <select
           value={statusFilter}
           onChange={e => setStatus(e.target.value)}
           className="bg-white border border-slate-200 text-slate-600 text-sm rounded-xl px-4 py-2.5 outline-none cursor-pointer"
         >
           {[
+            { value: 'All', label: 'Toate stările' },
             { value: 'Online', label: 'Online' },
             { value: 'Offline', label: 'Offline' },
           ].map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -215,6 +183,9 @@ export default function SensorConfig() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-bold text-slate-800 text-base">{s.name}</div>
+                  {s.patientName && s.patientName !== 'Unknown' && (
+                    <div className="text-xs text-slate-500 mt-0.5 truncate">{s.patientName}</div>
+                  )}
                 </div>
                 <StatusPill status={s.status} />
               </div>

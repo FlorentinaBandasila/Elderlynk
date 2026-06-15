@@ -1,11 +1,14 @@
 using Elderlynk.Models;
 using Elderlynk.Services;
+using Elderlynk.Web.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class AlarmsController : ControllerBase
     {
         private readonly IAlarmService _service;
@@ -22,7 +25,7 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
-                var alarms = await _service.GetAllAsync(cancellationToken);
+                var alarms = await _service.GetForUserAsync(User.GetUserId(), User.GetRole(), cancellationToken);
                 return Ok(alarms);
             }
             catch (Exception ex)
@@ -51,6 +54,7 @@ namespace Elderlynk.Web.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "1,2,3")]
         public async Task<ActionResult<AlarmResponseDto>> Create(
             [FromBody] CreateAlarmDto dto,
             CancellationToken cancellationToken)
@@ -70,7 +74,9 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        // Resolve / update an alarm – staff only (patients cannot resolve).
         [HttpPut("{id}")]
+        [Authorize(Roles = "1,2,3")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateAlarmDto dto, CancellationToken cancellationToken)
         {
             try
@@ -93,6 +99,7 @@ namespace Elderlynk.Web.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "1")]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
             try

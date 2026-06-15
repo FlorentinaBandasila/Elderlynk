@@ -34,6 +34,33 @@ namespace Elderlynk.Services
             });
         }
 
+        public async Task<IEnumerable<ConsultationResponseDto>> GetForUserAsync(int userId, int role, CancellationToken cancellationToken = default)
+        {
+            // Role ids: 1=Admin, 2=Medic, 3=Supraveghetor, 4=Pacient
+            IQueryable<Consultation> query = _context.Set<Consultation>().AsNoTracking();
+
+            switch (role)
+            {
+                case 1: // Admin – all
+                    break;
+                case 2: // Medic – own consultations
+                    query = query.Where(c => c.DoctorId == userId);
+                    break;
+                case 3: // Supraveghetor – consultations of supervised patients (read-only)
+                    query = query.Where(c => _context.Set<Alarm>()
+                        .Any(a => a.PatientId == c.PatientId && a.SupervisorId == userId));
+                    break;
+                case 4: // Pacient – own consultations (userId == ID_Pacient)
+                    query = query.Where(c => c.PatientId == userId);
+                    break;
+                default:
+                    return Enumerable.Empty<ConsultationResponseDto>();
+            }
+
+            var consultations = await query.ToListAsync(cancellationToken);
+            return consultations.Select(Map);
+        }
+
         public async Task<ConsultationResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
             var consultation = await _context.Set<Consultation>()
@@ -138,5 +165,20 @@ namespace Elderlynk.Services
             _context.Set<Consultation>().Remove(consultation);
             await _context.SaveChangesAsync(cancellationToken);
         }
+
+        private static ConsultationResponseDto Map(Consultation c) => new()
+        {
+            ConsultationId = c.ConsultationId,
+            PatientId = c.PatientId,
+            DoctorId = c.DoctorId,
+            ConsultationDate = c.ConsultationDate,
+            PresentationReason = c.PresentationReason,
+            Symptoms = c.Symptoms,
+            DiagnosisCode = c.DiagnosisCode,
+            DiagnosticText = c.DiagnosticText,
+            Referrals = c.Referrals,
+            GeneratedPrescriptions = c.GeneratedPrescriptions,
+            Notes = c.Notes
+        };
     }
 }

@@ -5,6 +5,12 @@ namespace Elderlynk.Services
 {
     public class PatientService : IPatientService
     {
+        // Role ids (Roluri): 1=Admin, 2=Medic, 3=Supraveghetor, 4=Pacient
+        private const int RoleAdmin = 1;
+        private const int RoleMedic = 2;
+        private const int RoleSupervisor = 3;
+        private const int RolePatient = 4;
+
         private readonly DbContext _context;
 
         public PatientService(DbContext context)
@@ -18,24 +24,40 @@ namespace Elderlynk.Services
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
-            return patients.Select(p => new PatientResponseDto
+            return patients.Select(Map);
+        }
+
+        public async Task<IEnumerable<PatientResponseDto>> GetForUserAsync(int userId, int role, CancellationToken cancellationToken = default)
+        {
+            IQueryable<Patient> query = _context.Set<Patient>().AsNoTracking();
+
+            switch (role)
             {
-                PatientId = p.PatientId,
-                LastName = p.LastName,
-                FirstName = p.FirstName,
-                CNP = p.CNP,
-                Street = p.Street,
-                City = p.City,
-                County = p.County,
-                PostalCode = p.PostalCode,
-                Phone = p.Phone,
-                Email = p.Email,
-                Profession = p.Profession,
-                WorkPlace = p.WorkPlace,
-                DateAdded = p.DateAdded,
-                LastModified = p.LastModified,
-                Active = p.Active
-            });
+                case RoleAdmin:
+                    break; // all patients
+
+                case RoleMedic:
+                    // Patients the medic owns via at least one consultation.
+                    query = query.Where(p => _context.Set<Consultation>()
+                        .Any(c => c.PatientId == p.PatientId && c.DoctorId == userId));
+                    break;
+
+                case RoleSupervisor:
+                    // Patients with alarm events assigned to this supervisor.
+                    query = query.Where(p => _context.Set<Alarm>()
+                        .Any(a => a.PatientId == p.PatientId && a.SupervisorId == userId));
+                    break;
+
+                case RolePatient:
+                    query = query.Where(p => p.PatientId == userId);
+                    break;
+
+                default:
+                    return Enumerable.Empty<PatientResponseDto>();
+            }
+
+            var patients = await query.ToListAsync(cancellationToken);
+            return patients.Select(Map);
         }
 
         public async Task<PatientResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -44,27 +66,65 @@ namespace Elderlynk.Services
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.PatientId == id, cancellationToken);
 
-            if (patient == null)
-                return null;
-
-            return new PatientResponseDto
-            {
-                PatientId = patient.PatientId,
-                LastName = patient.LastName,
-                FirstName = patient.FirstName,
-                CNP = patient.CNP,
-                Street = patient.Street,
-                City = patient.City,
-                County = patient.County,
-                PostalCode = patient.PostalCode,
-                Phone = patient.Phone,
-                Email = patient.Email,
-                Profession = patient.Profession,
-                WorkPlace = patient.WorkPlace,
-                DateAdded = patient.DateAdded,
-                LastModified = patient.LastModified,
-                Active = patient.Active
-            };
+            return patient == null ? null : Map(patient);
         }
+
+        public async Task<PatientResponseDto> CreateAsync(CreatePatientDto dto, int? linkMedicId, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default)
+        {
+            var patient = new Patient
+            {
+                LastName = dto.LastName,
+                FirstName = dto.FirstName,
+                CNP = dto.CNP,
+                Street = dto.Street,
+                City = dto.City,
+                County = dto.County,
+                PostalCode = dto.PostalCode,
+                Phone = dto.Phone,
+                Email = dto.Email,
+                Profession = dto.Profession,
+                WorkPlace = dto.WorkPlace,
+                Active = true,
+                DateAdded = DateTime.UtcNow
+            };
+
+            _context.Set<Patient>().Add(patient);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            if (linkMedicId.HasValue)
+            {
+                _context.Set<Consultation>().Add(new Consultation
+                {
+                    PatientId = patient.PatientId,
+                    DoctorId = linkMedicId.Value,
+                    ConsultationDate = DateTime.Now,
+                    PresentationReason = "Înregistrare pacient"
+                });
+            }
+
+            AuditHelper.Add(_context, actingUserId, "CREATE_PATIENT", "Pacienti", sourceIp);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return Map(patient);
+        }
+
+        private static PatientResponseDto Map(Patient p) => new()
+        {
+            PatientId = p.PatientId,
+            LastName = p.LastName,
+            FirstName = p.FirstName,
+            CNP = p.CNP,
+            Street = p.Street,
+            City = p.City,
+            County = p.County,
+            PostalCode = p.PostalCode,
+            Phone = p.Phone,
+            Email = p.Email,
+            Profession = p.Profession,
+            WorkPlace = p.WorkPlace,
+            DateAdded = p.DateAdded,
+            LastModified = p.LastModified,
+            Active = p.Active
+        };
     }
 }

@@ -1,11 +1,14 @@
 using Elderlynk.Models;
 using Elderlynk.Services;
+using Elderlynk.Web.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class ConsultationsController : ControllerBase
     {
         private readonly IConsultationService _service;
@@ -22,7 +25,7 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
-                var consultations = await _service.GetAllAsync(cancellationToken);
+                var consultations = await _service.GetForUserAsync(User.GetUserId(), User.GetRole(), cancellationToken);
                 return Ok(consultations);
             }
             catch (Exception ex)
@@ -51,6 +54,7 @@ namespace Elderlynk.Web.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "1,2")]
         public async Task<ActionResult<ConsultationResponseDto>> Create(
             [FromBody] CreateConsultationDto dto,
             CancellationToken cancellationToken)
@@ -71,6 +75,7 @@ namespace Elderlynk.Web.Controllers
         }
 
         [HttpPut("{id}")]
+        [Authorize(Roles = "1,2")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateConsultationDto dto, CancellationToken cancellationToken)
         {
             try
@@ -93,6 +98,7 @@ namespace Elderlynk.Web.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "1,2")]
         public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
         {
             try

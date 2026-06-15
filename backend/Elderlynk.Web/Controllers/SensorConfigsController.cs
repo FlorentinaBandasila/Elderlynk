@@ -1,11 +1,13 @@
 using Elderlynk.Models;
 using Elderlynk.Services;
+using Elderlynk.Web.Auth;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
     public class SensorConfigsController : ControllerBase
     {
         private readonly ISensorConfigService _service;
@@ -22,7 +24,7 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
-                var configs = await _service.GetAllAsync(cancellationToken);
+                var configs = await _service.GetForUserAsync(User.GetUserId(), User.GetRole(), cancellationToken);
                 return Ok(configs);
             }
             catch (Exception ex)

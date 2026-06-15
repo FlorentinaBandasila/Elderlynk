@@ -6,6 +6,7 @@ namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
     public class SensorMeasurementsController : ControllerBase
     {
         private readonly ISensorMeasurementService _service;

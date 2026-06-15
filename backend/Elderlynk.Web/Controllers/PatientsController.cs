@@ -1,14 +1,18 @@
 using Elderlynk.Models;
 using Elderlynk.Services;
+using Elderlynk.Web.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Elderlynk.Web.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class PatientsController : ControllerBase
     {
+        private const int RoleMedic = 2;
+
         private readonly IPatientService _service;
         private readonly ILogger<PatientsController> _logger;
         private readonly IWebHostEnvironment _env;
@@ -25,7 +29,7 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
-                var patients = await _service.GetAllAsync(cancellationToken);
+                var patients = await _service.GetForUserAsync(User.GetUserId(), User.GetRole(), cancellationToken);
                 return Ok(patients);
             }
             catch (Exception ex)
@@ -56,7 +60,9 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        // Admin (free) and Medic (auto-links to themselves via Consultatii).
         [HttpPost]
+        [Authorize(Roles = "1,2")]
         public async Task<ActionResult<PatientResponseDto>> Create([FromBody] CreatePatientDto dto, CancellationToken cancellationToken)
         {
             try
@@ -64,45 +70,14 @@ namespace Elderlynk.Web.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var patient = new Patient
-                {
-                    LastName = dto.LastName,
-                    FirstName = dto.FirstName,
-                    CNP = dto.CNP,
-                    Street = dto.Street,
-                    City = dto.City,
-                    County = dto.County,
-                    PostalCode = dto.PostalCode,
-                    Phone = dto.Phone,
-                    Email = dto.Email,
-                    Profession = dto.Profession,
-                    WorkPlace = dto.WorkPlace,
-                    Active = true,
-                    DateAdded = DateTime.UtcNow
-                };
+                var currentUserId = User.GetUserId();
+                // A medic always links the new patient to themselves – id comes from the token, never the body.
+                int? linkMedicId = User.GetRole() == RoleMedic ? currentUserId : null;
 
-                var dbContext = _service.GetType().GetField("_context", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(_service) as DbContext;
-                dbContext?.Add(patient);
-                await dbContext?.SaveChangesAsync(cancellationToken)!;
+                var patient = await _service.CreateAsync(dto, linkMedicId, currentUserId,
+                    HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken);
 
-                return CreatedAtAction(nameof(GetById), new { id = patient.PatientId }, new PatientResponseDto
-                {
-                    PatientId = patient.PatientId,
-                    LastName = patient.LastName,
-                    FirstName = patient.FirstName,
-                    CNP = patient.CNP,
-                    Street = patient.Street,
-                    City = patient.City,
-                    County = patient.County,
-                    PostalCode = patient.PostalCode,
-                    Phone = patient.Phone,
-                    Email = patient.Email,
-                    Profession = patient.Profession,
-                    WorkPlace = patient.WorkPlace,
-                    Active = patient.Active,
-                    DateAdded = patient.DateAdded,
-                    LastModified = patient.LastModified
-                });
+                return CreatedAtAction(nameof(GetById), new { id = patient.PatientId }, patient);
             }
             catch (Exception ex)
             {

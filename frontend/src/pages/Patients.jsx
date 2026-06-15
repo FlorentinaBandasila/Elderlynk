@@ -7,11 +7,14 @@ import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { alarms } from '@/data/mock'
 import { patientAPI } from '@/services/api'
 import { mapPatientFromAPI, mapPatientToAPI } from '@/services/mappers'
+import { useAuth, ROLES } from '@/context/AuthContext'
 
 const activeAlarms = alarms.filter(a => a.status === 'Active')
 
 export default function Patients() {
   const navigate = useNavigate()
+  const { hasRole } = useAuth()
+  const canAddPatient = hasRole(ROLES.ADMIN) || hasRole(ROLES.MEDIC)
   const [patients, setPatients]   = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch]       = useState('')
@@ -112,14 +115,16 @@ export default function Patients() {
         <div>
           <h1 className="font-bold text-slate-800" style={{ fontSize: '32px' }}>Lista Pacienților</h1>
         </div>
-        <button
-          onClick={() => setShowDialog(true)}
-          className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium text-sm text-white cursor-pointer hover:opacity-90 transition-opacity"
-          style={{ backgroundColor: '#0f4c81' }}
-        >
-          <Plus size={18} />
-          Adaugă Pacient
-        </button>
+        {canAddPatient && (
+          <button
+            onClick={() => setShowDialog(true)}
+            className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium text-sm text-white cursor-pointer hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: '#0f4c81' }}
+          >
+            <Plus size={18} />
+            Adaugă Pacient
+          </button>
+        )}
       </div>
 
       {/* Search */}

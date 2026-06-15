@@ -10,6 +10,9 @@ namespace Elderlynk.Models
         [Column("ID_Utilizator")]
         public int UserId { get; set; }
 
+        [Column("ID_Rol")]
+        public int? RoleId { get; set; }
+
         [Column("Email")]
         [Required]
         [MaxLength(255)]

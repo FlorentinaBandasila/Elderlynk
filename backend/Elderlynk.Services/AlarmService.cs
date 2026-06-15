@@ -58,6 +58,64 @@ namespace Elderlynk.Services
             });
         }
 
+        public async Task<IEnumerable<AlarmResponseDto>> GetForUserAsync(int userId, int role, CancellationToken cancellationToken = default)
+        {
+            // Role ids: 1=Admin, 2=Medic, 3=Supraveghetor, 4=Pacient
+            IQueryable<Alarm> query = _context.Set<Alarm>().AsNoTracking();
+
+            switch (role)
+            {
+                case 1: // Admin – all
+                    break;
+                case 2: // Medic – alarms of patients the medic owns (via Consultatii)
+                    query = query.Where(a => _context.Set<Consultation>()
+                        .Any(c => c.PatientId == a.PatientId && c.DoctorId == userId));
+                    break;
+                case 3: // Supraveghetor – alarms assigned to this supervisor
+                    query = query.Where(a => a.SupervisorId == userId);
+                    break;
+                case 4: // Pacient – own alarms (userId == ID_Pacient)
+                    query = query.Where(a => a.PatientId == userId);
+                    break;
+                default:
+                    return Enumerable.Empty<AlarmResponseDto>();
+            }
+
+            var alarms = await query.ToListAsync(cancellationToken);
+
+            var patients = await _context.Set<Patient>().AsNoTracking().ToListAsync(cancellationToken);
+            var sensors = await _context.Set<SensorConfig>().AsNoTracking().ToListAsync(cancellationToken);
+            var measurements = await _context.Set<SensorMeasurement>().AsNoTracking().ToListAsync(cancellationToken);
+
+            return alarms.Select(a =>
+            {
+                var patient = patients.FirstOrDefault(p => p.PatientId == a.PatientId);
+                var sensor = sensors.FirstOrDefault(s => s.SensorId == a.SensorId);
+                var latestMeasurement = measurements
+                    .Where(m => m.SensorId == a.SensorId)
+                    .OrderByDescending(m => m.MeasurementDateTime)
+                    .FirstOrDefault();
+
+                return new AlarmResponseDto
+                {
+                    AlarmId = a.AlarmId,
+                    SensorId = a.SensorId,
+                    PatientId = a.PatientId,
+                    AlarmType = a.AlarmType,
+                    Message = a.Message,
+                    TriggerDate = a.TriggerDate,
+                    ResolutionDate = a.ResolutionDate,
+                    SupervisorId = a.SupervisorId,
+                    ResolutionNotes = a.ResolutionNotes,
+                    IsResolved = a.IsResolved,
+                    PatientFirstName = patient?.FirstName,
+                    PatientLastName = patient?.LastName,
+                    SensorName = sensor?.Name,
+                    MeasurementValue = latestMeasurement?.Value
+                };
+            });
+        }
+
         public async Task<AlarmResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
             var alarm = await _context.Set<Alarm>()
