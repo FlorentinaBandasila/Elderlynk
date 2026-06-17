@@ -41,7 +41,7 @@ namespace Elderlynk.Services
             { "428", "Congestive Heart Failure" },
         };
 
-        public ICDService(IHttpClientFactory httpClientFactory, ILogger<ICDService> logger)
+        public ICDService(Microsoft.IdentityModel.Clients.ActiveDirectory.IHttpClientFactory httpClientFactory, ILogger<ICDService> logger)
         {
             _httpClient = httpClientFactory.GetHttpClient();
             _logger = logger;

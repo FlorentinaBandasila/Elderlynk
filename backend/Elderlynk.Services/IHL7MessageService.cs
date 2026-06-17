@@ -24,5 +24,17 @@ namespace Elderlynk.Services
         /// previously sent referral, persisting it as a Directie='IN' message.
         /// </summary>
         Task<HL7MessageResponseDto?> GenerateReplyAsync(int referralMessageId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Forwards a stored message's FHIR Bundle to an external clinic's HTTP endpoint
+        /// (e.g. exposed via ngrok). Returns null if the message does not exist.
+        /// </summary>
+        Task<SendHL7ResultDto?> SendToExternalAsync(int messageId, string targetUrl, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Persists a FHIR Bundle received from an external clinic as a Directie='IN'
+        /// message, matching it to a local patient by CNP when possible.
+        /// </summary>
+        Task<HL7MessageResponseDto> ReceiveExternalAsync(string fhirXml, CancellationToken cancellationToken = default);
     }
 }

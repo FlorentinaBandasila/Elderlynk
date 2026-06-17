@@ -211,6 +211,7 @@ export const hl7MessageAPI = {
   create: (data) => request('/hl7messages', { method: 'POST', body: data }),
   referral: (data) => request('/hl7messages/referral', { method: 'POST', body: data }),
   reply: (referralId) => request(`/hl7messages/${referralId}/reply`, { method: 'POST' }),
+  send: (id, data) => request(`/hl7messages/${id}/send`, { method: 'POST', body: data }),
   update: (id, data) => request(`/hl7messages/${id}`, { method: 'PUT', body: data }),
   delete: (id) => request(`/hl7messages/${id}`, { method: 'DELETE' }),
 }

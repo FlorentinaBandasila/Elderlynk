@@ -32,6 +32,7 @@ builder.Services.AddScoped<IUserRoleService, UserRoleService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
 // builder.Services.AddScoped<IDoctorService, DoctorService>();
 // builder.Services.AddScoped<ISupervisorService, SupervisorService>();
 // Note: Doctor and Supervisor services disabled - tables not in existing schema

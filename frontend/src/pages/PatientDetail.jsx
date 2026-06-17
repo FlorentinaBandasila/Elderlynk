@@ -70,72 +70,82 @@ const hl7Escape = (s) => String(s ?? '')
   .replace(/\\/g, '\\E\\').replace(/\|/g, '\\F\\').replace(/\^/g, '\\S\\')
   .replace(/&/g, '\\T\\').replace(/~/g, '\\R\\').replace(/[\r\n]+/g, ' ')
 
-// Recover specialty / reason / clinical info from a stored referral XML envelope.
+// Read the `value` attribute of the first descendant element with `tag` (FHIR
+// stores primitives as <tag value="..."/>). `getElementsByTagName` is used
+// instead of querySelector because FHIR's default xmlns makes CSS selectors
+// namespace-sensitive and unreliable here.
+const fhirVal = (parent, tag) => parent?.getElementsByTagName(tag)?.[0]?.getAttribute('value') || ''
+
+// Recover specialty / reason / clinical info from a stored FHIR referral Bundle.
 const parseReferralXml = (content) => {
   try {
     const doc = new DOMParser().parseFromString(content || '', 'application/xml')
-    const rf1 = doc.querySelector('RF1')
-    const obx = doc.querySelector('OBX')
+    const sr = doc.getElementsByTagName('ServiceRequest')[0]
+    if (!sr) return { specialty: '', reason: '', clinicalInfo: '' }
     return {
-      specialty: rf1?.getAttribute('specialty') || '',
-      reason: rf1?.getAttribute('reason') || '',
-      clinicalInfo: obx?.textContent?.trim() || '',
+      specialty: fhirVal(sr.getElementsByTagName('code')[0], 'text'),
+      reason: fhirVal(sr.getElementsByTagName('reasonCode')[0], 'text'),
+      clinicalInfo: fhirVal(sr.getElementsByTagName('note')[0], 'text'),
     }
   } catch {
     return { specialty: '', reason: '', clinicalInfo: '' }
   }
 }
 
-// Format an HL7 timestamp (YYYYMMDDHHMMSS) into a readable ro-RO date-time.
-const formatHL7Ts = (ts) => {
+// Format a FHIR instant / ISO 8601 timestamp into a readable ro-RO date-time.
+const formatFhirTs = (ts) => {
   if (!ts) return ''
-  const m = String(ts).match(/^(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?(\d{2})?/)
-  if (!m) return ts
-  const [, y, mo, d, h = '00', mi = '00'] = m
-  const dt = new Date(`${y}-${mo}-${d}T${h}:${mi}:00`)
+  const dt = new Date(ts)
   return isNaN(dt) ? ts : dt.toLocaleString('ro-RO')
 }
 
-// Parse the Elderlynk XML-style HL7 envelope into structured sections for display.
-// Returns null when the content isn't recognizable XML HL7 (caller falls back to raw).
+// Parse a stored FHIR R4 message Bundle into structured sections for display.
+// Returns null when the content isn't a recognizable FHIR Bundle (caller falls
+// back to rendering the raw XML).
 const parseHL7Display = (content) => {
-  if (!content || !content.includes('<HL7Message')) return null
+  if (!content || !content.includes('<Bundle') || !content.includes('hl7.org/fhir')) return null
   try {
     const doc = new DOMParser().parseFromString(content, 'application/xml')
-    if (doc.querySelector('parsererror')) return null
-    const root = doc.querySelector('HL7Message')
-    const msh = doc.querySelector('MSH')
-    const pid = doc.querySelector('PID')
-    const rf1 = doc.querySelector('RF1')
-    const obx = doc.querySelector('OBX')
+    if (doc.getElementsByTagName('parsererror').length) return null
 
-    const name = pid?.getAttribute('name') || ''
-    const [lastName, firstName] = name.split('^')
+    const bundle = doc.getElementsByTagName('Bundle')[0]
+    const header = doc.getElementsByTagName('MessageHeader')[0]
+    const pat = doc.getElementsByTagName('Patient')[0]
+    const sr = doc.getElementsByTagName('ServiceRequest')[0]
+    const comm = doc.getElementsByTagName('Communication')[0]
+    if (!bundle) return null
+
+    const evtDisplay = fhirVal(header?.getElementsByTagName('eventCoding')[0], 'display')
+    const family = fhirVal(pat?.getElementsByTagName('name')[0], 'family')
+    const given = fhirVal(pat?.getElementsByTagName('name')[0], 'given')
 
     return {
-      type: root?.getAttribute('type') || '',
+      type: evtDisplay,
       header: {
-        from: msh?.getAttribute('sendingApp') || '',
-        to: msh?.getAttribute('receivingApp') || '',
-        messageType: msh?.getAttribute('messageType') || '',
-        controlId: msh?.getAttribute('controlId') || '',
-        timestamp: formatHL7Ts(msh?.getAttribute('timestamp')),
-        inResponseTo: msh?.getAttribute('inResponseTo') || '',
+        from: fhirVal(header?.getElementsByTagName('source')[0], 'name'),
+        to: fhirVal(header?.getElementsByTagName('destination')[0], 'name'),
+        messageType: evtDisplay,
+        controlId: fhirVal(bundle.getElementsByTagName('identifier')[0], 'value'),
+        timestamp: formatFhirTs(fhirVal(bundle, 'timestamp')),
+        inResponseTo: fhirVal(header?.getElementsByTagName('response')[0], 'identifier'),
       },
-      patient: pid ? {
-        id: pid.getAttribute('id') || '',
-        name: firstName ? `${firstName} ${lastName}` : (lastName || name),
-        cnp: pid.getAttribute('cnp') || '',
+      patient: pat ? {
+        id: fhirVal(pat, 'id'),
+        name: given ? `${given} ${family}` : (family || ''),
+        cnp: fhirVal(pat.getElementsByTagName('identifier')[0], 'value'),
       } : null,
-      referral: rf1 ? {
-        status: rf1.getAttribute('status') || '',
-        specialty: rf1.getAttribute('specialty') || '',
-        reason: rf1.getAttribute('reason') || '',
+      referral: sr ? {
+        status: fhirVal(sr, 'status'),
+        specialty: fhirVal(sr.getElementsByTagName('code')[0], 'text'),
+        reason: fhirVal(sr.getElementsByTagName('reasonCode')[0], 'text'),
       } : null,
-      body: obx ? {
-        id: obx.getAttribute('id') || '',
-        text: obx.textContent?.trim() || '',
-      } : null,
+      body: comm ? {
+        id: 'MedicalLetter',
+        text: fhirVal(comm.getElementsByTagName('payload')[0], 'contentString'),
+      } : (sr && fhirVal(sr.getElementsByTagName('note')[0], 'text') ? {
+        id: 'ClinicalInfo',
+        text: fhirVal(sr.getElementsByTagName('note')[0], 'text'),
+      } : null),
     }
   } catch {
     return null
@@ -221,6 +231,9 @@ export default function PatientDetail() {
   const [savingReferral, setSavingReferral] = useState(false)
   const [viewMessage, setViewMessage] = useState(null)
   const [showRawHL7, setShowRawHL7] = useState(false)
+  const [sendTarget, setSendTarget] = useState(() => localStorage.getItem('hl7ClinicUrl') || '')
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState(null)
   const [busyReplyId, setBusyReplyId] = useState(null)
   const [editTarget, setEditTarget] = useState(null) // { type, id, form, title }
   const [savingEdit, setSavingEdit] = useState(false)
@@ -314,6 +327,26 @@ export default function PatientDetail() {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  }
+
+  // Forward the open message's FHIR Bundle to another clinic's ngrok receive URL.
+  const handleSendExternal = async () => {
+    const url = sendTarget.trim()
+    if (!url || !viewMessage) return
+    setSending(true)
+    setSendResult(null)
+    try {
+      localStorage.setItem('hl7ClinicUrl', url)
+      const res = await hl7MessageAPI.send(viewMessage.messageId, { targetUrl: url })
+      setSendResult(res?.success
+        ? { ok: true, text: `Trimis cu succes (HTTP ${res.statusCode}).` }
+        : { ok: false, text: `Eșuat (HTTP ${res?.statusCode ?? 0}). ${res?.responseBody ?? ''}`.trim() })
+    } catch (err) {
+      console.error('Error sending HL7 to external clinic:', err)
+      setSendResult({ ok: false, text: 'Eroare la trimiterea către clinică.' })
+    } finally {
+      setSending(false)
+    }
   }
 
   const handleAddActivityRec = async () => {
@@ -1082,7 +1115,7 @@ export default function PatientDetail() {
       </Dialog>
 
       {/* HL7 message viewer */}
-      <Dialog open={!!viewMessage} onClose={() => { setViewMessage(null); setShowRawHL7(false) }} title="Mesaj HL7" maxWidth="max-w-2xl">
+      <Dialog open={!!viewMessage} onClose={() => { setViewMessage(null); setShowRawHL7(false); setSendResult(null) }} title="Mesaj HL7" maxWidth="max-w-2xl">
         <DialogBody>
           {(() => {
             const isOut = (viewMessage?.direction || '').toUpperCase() === 'OUT'
@@ -1178,6 +1211,33 @@ export default function PatientDetail() {
 {viewMessage?.content || ''}
                   </pre>
                 )}
+
+                {/* Forward to another clinic over ngrok */}
+                <div className="mt-5 pt-4 border-t border-slate-200">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                    <Send size={13} /> Trimite la altă clinică
+                  </div>
+                  <p className="text-xs text-slate-400 mb-2">
+                    URL-ul de recepție al clinicii (ex. https://abc123.ngrok-free.app/api/hl7messages/receive)
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://...ngrok-free.app/api/hl7messages/receive"
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none"
+                      value={sendTarget}
+                      onChange={e => setSendTarget(e.target.value)}
+                    />
+                    <Button onClick={handleSendExternal} disabled={sending || !sendTarget.trim()}>
+                      <Send size={14} /> {sending ? 'Se trimite…' : 'Trimite'}
+                    </Button>
+                  </div>
+                  {sendResult && (
+                    <p className={`text-xs mt-2 ${sendResult.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {sendResult.text}
+                    </p>
+                  )}
+                </div>
               </>
             )
           })()}
@@ -1193,7 +1253,7 @@ export default function PatientDetail() {
               <Download size={14} /> Export HL7
             </Button>
           )}
-          <Button variant="ghost" onClick={() => { setViewMessage(null); setShowRawHL7(false) }}>Închide</Button>
+          <Button variant="ghost" onClick={() => { setViewMessage(null); setShowRawHL7(false); setSendResult(null) }}>Închide</Button>
         </DialogFooter>
       </Dialog>
 
