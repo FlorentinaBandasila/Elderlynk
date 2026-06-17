@@ -1,14 +1,17 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import {
-  Heart, Wind, Thermometer, Activity, Stethoscope, User, ClipboardList, Plus, Pencil, Trash2
+  Heart, Wind, Thermometer, Activity, Stethoscope, User, ClipboardList, Plus, Pencil, Trash2,
+  Send, FileText, Inbox, ArrowUpRight, Download
 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
+import Button from '@/components/ui/Button'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
-import { patientAPI, consultationAPI, deviceAPI, medicalRecommendationAPI } from '@/services/api'
-import { mapPatientFromAPI, mapConsultationFromAPI, mapDeviceFromAPI } from '@/services/mappers'
+import { TimeSeriesChart, CHART_COLORS } from '@/components/ui/Chart'
+import { patientAPI, consultationAPI, deviceAPI, medicalRecommendationAPI, hl7MessageAPI } from '@/services/api'
+import { mapPatientFromAPI, mapConsultationFromAPI, mapDeviceFromAPI, groupMeasurementsBySensor } from '@/services/mappers'
 import { useAuth, ROLES } from '@/context/AuthContext'
 
 const consultVariant = { Scheduled: 'blue', 'In Progress': 'cyan', Completed: 'green', Cancelled: 'gray' }
@@ -44,6 +47,97 @@ const activityIconColor = {
   Stethoscope: '#0891b2', Activity: '#d97706', Settings2: '#94a3b8',
 }
 
+// ===== HL7 v2.x export helpers =====
+// Build a downloadable, pipe-delimited HL7 v2.5 referral (REF^I12) carrying the
+// patient demographics, ICD-9 diagnosis and the latest monitored parameters.
+
+// Derive birth date (YYYYMMDD) and sex (M/F/U) from a Romanian CNP.
+const parseCNP = (cnp) => {
+  if (!cnp || cnp.length !== 13) return { dob: '', sex: 'U' }
+  const s = cnp[0]
+  const century = { 1: '19', 2: '19', 3: '18', 4: '18', 5: '20', 6: '20', 7: '19', 8: '19', 9: '19' }[s] || '19'
+  const sex = '13579'.includes(s) ? 'M' : '2468'.includes(s) ? 'F' : 'U'
+  return { dob: `${century}${cnp.substring(1, 3)}${cnp.substring(3, 5)}${cnp.substring(5, 7)}`, sex }
+}
+
+const hl7Timestamp = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+
+// Escape the HL7 delimiter characters so field values stay well-formed.
+const hl7Escape = (s) => String(s ?? '')
+  .replace(/\\/g, '\\E\\').replace(/\|/g, '\\F\\').replace(/\^/g, '\\S\\')
+  .replace(/&/g, '\\T\\').replace(/~/g, '\\R\\').replace(/[\r\n]+/g, ' ')
+
+// Recover specialty / reason / clinical info from a stored referral XML envelope.
+const parseReferralXml = (content) => {
+  try {
+    const doc = new DOMParser().parseFromString(content || '', 'application/xml')
+    const rf1 = doc.querySelector('RF1')
+    const obx = doc.querySelector('OBX')
+    return {
+      specialty: rf1?.getAttribute('specialty') || '',
+      reason: rf1?.getAttribute('reason') || '',
+      clinicalInfo: obx?.textContent?.trim() || '',
+    }
+  } catch {
+    return { specialty: '', reason: '', clinicalInfo: '' }
+  }
+}
+
+const buildHL7v2 = ({ patient, consultations, sensorGroups, message }) => {
+  const E = hl7Escape
+  const ts = hl7Timestamp()
+  const ref = parseReferralXml(message?.content)
+  const { dob, sex } = parseCNP(patient?.cnp)
+  const seg = []
+
+  // MSH – message header
+  seg.push(['MSH', '^~\\&', 'ELDERLYNK', 'CARELINK', 'SPECIALIST_SYS',
+    ref.specialty ? E(ref.specialty) : 'SPECIALIST', ts, '', 'REF^I12^REF_I12',
+    `MSG${ts}`, 'P', '2.5'].join('|'))
+
+  // PID – patient demographics
+  const idList = `${patient?.patientId ?? ''}^^^ELDERLYNK^MR~${E(patient?.cnp)}^^^ROU^NNROU`
+  const name = `${E(patient?.lastName)}^${E(patient?.firstName)}`
+  const addr = [E(patient?.street), '', E(patient?.city), E(patient?.county), E(patient?.postalCode), 'ROU'].join('^')
+  seg.push(['PID', '1', '', idList, '', name, '', dob, sex, '', '', addr, '', E(patient?.phone)].join('|'))
+
+  // PV1 – outpatient visit
+  seg.push(['PV1', '1', 'O'].join('|'))
+
+  // DG1 – ICD-9 diagnoses, newest consultations first
+  const diagnosed = (consultations || [])
+    .filter((c) => c.diagnosisCode)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  diagnosed.forEach((c, i) => {
+    seg.push(['DG1', String(i + 1), 'I9', `${E(c.diagnosisCode)}^${E(c.diagnosticText)}^I9`,
+      E(c.diagnosticText), (c.date || '').replace(/-/g, ''), 'F'].join('|'))
+  })
+
+  // OBX – latest value of every monitored parameter
+  let obx = 0
+  for (const [type, g] of Object.entries(sensorGroups || {})) {
+    const latest = (g.data || []).filter((d) => d.value != null).sort((a, b) => b.ts - a.ts)[0]
+    if (!latest) continue
+    const range = g.thresholds?.lowWarn != null && g.thresholds?.highWarn != null
+      ? `${g.thresholds.lowWarn}-${g.thresholds.highWarn}` : ''
+    seg.push(['OBX', String(++obx), 'NM', `${E(type)}^${E(type)}`, '', String(latest.value),
+      E(g.unit), range, '', '', '', 'F', '', E(latest.time)].join('|'))
+  }
+
+  // OBX – referral clinical free text
+  if (ref.clinicalInfo) {
+    seg.push(['OBX', String(++obx), 'TX', 'ClinicalInfo^Informatii clinice', '', E(ref.clinicalInfo), '', '', '', '', 'F'].join('|'))
+  }
+
+  // RF1 – referral information
+  seg.push(['RF1', ref.specialty ? `^^^^${E(ref.specialty)}` : '', 'P', 'R', '', '', ts, '', E(ref.reason)].join('|'))
+
+  return seg.join('\r') + '\r'
+}
+
 export default function PatientDetail() {
   const { id }   = useParams()
   const navigate = useNavigate()
@@ -56,11 +150,21 @@ export default function PatientDetail() {
   const [history, setHistory] = useState([])
   const [medications, setMedications] = useState([])
   const [activity, setActivity] = useState([])
+  const [sensorGroups, setSensorGroups] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showRecDialog, setShowRecDialog] = useState(false)
   const [recForm, setRecForm] = useState({ tipRecomandare: '', descriere: '' })
   const [savingRec, setSavingRec] = useState(false)
+  const [showActivityDialog, setShowActivityDialog] = useState(false)
+  const [activityForm, setActivityForm] = useState({ activityType: 'Mers', dailyDurationMinutes: '', description: '', startDate: '', endDate: '' })
+  const [savingActivity, setSavingActivity] = useState(false)
+  const [hl7Messages, setHl7Messages] = useState([])
+  const [showReferralDialog, setShowReferralDialog] = useState(false)
+  const [referralForm, setReferralForm] = useState({ specialty: 'Cardiologie', reason: '', clinicalInfo: '' })
+  const [savingReferral, setSavingReferral] = useState(false)
+  const [viewMessage, setViewMessage] = useState(null)
+  const [busyReplyId, setBusyReplyId] = useState(null)
   const [editTarget, setEditTarget] = useState(null) // { type, id, form, title }
   const [savingEdit, setSavingEdit] = useState(false)
   const effectRan = useRef(false)
@@ -99,6 +203,88 @@ export default function PatientDetail() {
       const r = await patientAPI.getActivity(patientId)
       setActivity(Array.isArray(r) ? r : [])
     } catch { setActivity([]) }
+  }
+  const loadHl7 = async () => {
+    try {
+      const r = await hl7MessageAPI.getByPatient(patientId)
+      setHl7Messages(Array.isArray(r) ? r : [])
+    } catch { setHl7Messages([]) }
+  }
+
+  const handleCreateReferral = async () => {
+    if (!referralForm.reason.trim()) { alert('Motivul trimiterii este obligatoriu.'); return }
+    setSavingReferral(true)
+    try {
+      await hl7MessageAPI.referral({
+        patientId,
+        specialty: referralForm.specialty.trim() || null,
+        reason: referralForm.reason.trim(),
+        clinicalInfo: referralForm.clinicalInfo.trim() || null,
+      })
+      await loadHl7()
+      setShowReferralDialog(false)
+      setReferralForm({ specialty: 'Cardiologie', reason: '', clinicalInfo: '' })
+    } catch (err) {
+      console.error('Error generating referral:', err)
+      alert('Eroare la generarea trimiterii HL7.')
+    } finally {
+      setSavingReferral(false)
+    }
+  }
+
+  const handleReceiveLetter = async (referralId) => {
+    setBusyReplyId(referralId)
+    try {
+      await hl7MessageAPI.reply(referralId)
+      await loadHl7()
+    } catch (err) {
+      console.error('Error receiving medical letter:', err)
+      alert('Eroare la primirea scrisorii medicale.')
+    } finally {
+      setBusyReplyId(null)
+    }
+  }
+
+  // Build an HL7 v2.x referral from the current patient record and download it as a .hl7 file.
+  const handleExportHL7 = (message) => {
+    const hl7 = buildHL7v2({ patient, consultations, sensorGroups, message })
+    const blob = new Blob([hl7], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `HL7_${(patient?.lastName || 'pacient')}_${message?.messageId ?? hl7Timestamp()}.hl7`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleAddActivityRec = async () => {
+    if (!activityForm.activityType.trim()) { alert('Tipul activității este obligatoriu.'); return }
+    setSavingActivity(true)
+    try {
+      // Activity recommendations are persisted in the existing Recomandari_Medicale table:
+      // type carries the activity, description carries the daily duration + instructions.
+      const parts = []
+      if (activityForm.dailyDurationMinutes) parts.push(`${activityForm.dailyDurationMinutes} min/zi`)
+      if (activityForm.description.trim()) parts.push(activityForm.description.trim())
+      if (activityForm.startDate || activityForm.endDate)
+        parts.push(`Perioadă: ${activityForm.startDate || '...'} → ${activityForm.endDate || '...'}`)
+
+      await medicalRecommendationAPI.create({
+        patientId,
+        tipRecomandare: `Activitate fizică: ${activityForm.activityType.trim()}`,
+        descriere: parts.join(' — '),
+      })
+      await Promise.all([loadRecommendations(), loadActivity()])
+      setShowActivityDialog(false)
+      setActivityForm({ activityType: 'Mers', dailyDurationMinutes: '', description: '', startDate: '', endDate: '' })
+    } catch (err) {
+      console.error('Error creating activity recommendation:', err)
+      alert('Eroare la adăugarea recomandării de activitate.')
+    } finally {
+      setSavingActivity(false)
+    }
   }
 
   const handleAddRecommendation = async () => {
@@ -226,6 +412,7 @@ export default function PatientDetail() {
         await Promise.all([
           loadConsultations(),
           loadRecommendations(),
+          loadHl7(),
           loadMedical(),
           loadActivity(),
           (async () => {
@@ -233,6 +420,12 @@ export default function PatientDetail() {
               const devicesResponse = await deviceAPI.getAll()
               setDevices(devicesResponse.filter(d => d.patientId === patientId).map(mapDeviceFromAPI))
             } catch { setDevices([]) }
+          })(),
+          (async () => {
+            try {
+              const measurements = await patientAPI.getMeasurements(patientId)
+              setSensorGroups(groupMeasurementsBySensor(measurements || []))
+            } catch { setSensorGroups({}) }
           })(),
         ])
       } catch (err) {
@@ -322,6 +515,15 @@ export default function PatientDetail() {
                       <Stethoscope size={13} style={{ color: '#0f4c81' }} />
                       <span style={{ color: '#0f4c81' }}>{physicianName}</span>
                     </span>
+                    {patient.caregiverName && (
+                      <>
+                        <span>·</span>
+                        <span className="flex items-center gap-1" title="Îngrijitor">
+                          <User size={13} style={{ color: '#0f4c81' }} />
+                          <span style={{ color: '#0f4c81' }}>{patient.caregiverName}</span>
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -432,16 +634,36 @@ export default function PatientDetail() {
             </div>
           )}
 
-          {/* Tendințe 24h */}
+          {/* Evoluție senzori (grafice) */}
           <Card>
             <CardBody className="py-5">
-              <h3 className="text-base font-bold text-slate-700 mb-4">Tendințe Vitale 24h</h3>
-              <div
-                className="flex items-center justify-center rounded-lg text-sm text-slate-400"
-                style={{ height: '120px', backgroundColor: '#f8fafc' }}
-              >
-                Niciun istoric disponibil.
-              </div>
+              <h3 className="text-base font-bold text-slate-700 mb-4">Evoluție Senzori</h3>
+              {Object.keys(sensorGroups).length === 0 ? (
+                <div
+                  className="flex items-center justify-center rounded-lg text-sm text-slate-400"
+                  style={{ height: '120px', backgroundColor: '#f8fafc' }}
+                >
+                  Niciun istoric de măsurători disponibil.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {Object.entries(sensorGroups).map(([type, g]) => (
+                    <div key={type}>
+                      <div className="text-sm font-semibold text-slate-600 mb-1">
+                        {type}{g.unit ? ` (${g.unit})` : ''}
+                      </div>
+                      <TimeSeriesChart
+                        data={g.data}
+                        series={[{ key: 'value', label: type, color: CHART_COLORS.primary }]}
+                        unit={g.unit}
+                        thresholds={g.thresholds}
+                        height={200}
+                        area
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardBody>
           </Card>
 
@@ -648,13 +870,22 @@ export default function PatientDetail() {
                 Recomandări
               </h3>
               {canEdit && (
-                <button
-                  onClick={() => setShowRecDialog(true)}
-                  className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity cursor-pointer"
-                  style={{ backgroundColor: '#0f4c81' }}
-                >
-                  <Plus size={14} /> Adaugă
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowActivityDialog(true)}
+                    className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity cursor-pointer"
+                    style={{ backgroundColor: '#00b4d8' }}
+                  >
+                    <Activity size={14} /> Activitate
+                  </button>
+                  <button
+                    onClick={() => setShowRecDialog(true)}
+                    className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity cursor-pointer"
+                    style={{ backgroundColor: '#0f4c81' }}
+                  >
+                    <Plus size={14} /> Adaugă
+                  </button>
+                </div>
               )}
             </div>
             <Card>
@@ -695,8 +926,176 @@ export default function PatientDetail() {
             </Card>
           </div>
 
+          {/* Trimiteri Specialist (HL7) */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold" style={{ color: '#0f4c81' }}>
+                Trimiteri Specialist (HL7)
+              </h3>
+              {canEdit && (
+                <button
+                  onClick={() => setShowReferralDialog(true)}
+                  className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ backgroundColor: '#0f4c81' }}
+                >
+                  <Send size={13} /> Trimitere
+                </button>
+              )}
+            </div>
+            <Card>
+              <CardBody className="py-3 divide-y divide-slate-50">
+                {hl7Messages.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-3">Nicio trimitere HL7.</p>
+                ) : (
+                  hl7Messages.map((m) => {
+                    const isOut = (m.direction || '').toUpperCase() === 'OUT'
+                    const hasReply = !isOut || hl7Messages.some(o =>
+                      (o.direction || '').toUpperCase() === 'IN' && new Date(o.transferDate) >= new Date(m.transferDate))
+                    return (
+                      <div key={m.messageId} className="py-3 first:pt-0 last:pb-0 flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                          style={{ backgroundColor: isOut ? '#dbeafe' : '#dcfce7' }}>
+                          {isOut ? <ArrowUpRight size={14} style={{ color: '#0f4c81' }} /> : <Inbox size={14} style={{ color: '#16a34a' }} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={isOut ? 'blue' : 'green'}>{isOut ? 'Trimitere' : 'Scrisoare medicală'}</Badge>
+                            <span className="text-xs text-slate-400">
+                              {m.transferDate ? new Date(m.transferDate).toLocaleString('ro-RO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <button onClick={() => setViewMessage(m)}
+                              className="text-xs font-medium text-[#0f4c81] hover:underline flex items-center gap-1 cursor-pointer">
+                              <FileText size={12} /> Vezi mesaj HL7
+                            </button>
+                            {isOut && (
+                              <button onClick={() => handleExportHL7(m)}
+                                className="text-xs font-medium text-amber-700 hover:underline flex items-center gap-1 cursor-pointer">
+                                <Download size={12} /> Export HL7
+                              </button>
+                            )}
+                            {canEdit && isOut && (
+                              <button onClick={() => handleReceiveLetter(m.messageId)} disabled={busyReplyId === m.messageId}
+                                className="text-xs font-medium text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50">
+                                <Inbox size={12} /> {busyReplyId === m.messageId ? 'Se primește...' : 'Primește scrisoare'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </CardBody>
+            </Card>
+          </div>
+
         </div>
       </div>
+
+      {/* Referral dialog */}
+      <Dialog open={showReferralDialog} onClose={() => setShowReferralDialog(false)} title="Trimitere către specialist (HL7)">
+        <DialogBody className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Specialitate</label>
+            <input type="text" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+              value={referralForm.specialty} onChange={e => setReferralForm(f => ({ ...f, specialty: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Motivul trimiterii</label>
+            <input type="text" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+              value={referralForm.reason} onChange={e => setReferralForm(f => ({ ...f, reason: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Informații clinice</label>
+            <textarea rows={3} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+              value={referralForm.clinicalInfo} onChange={e => setReferralForm(f => ({ ...f, clinicalInfo: e.target.value }))} />
+          </div>
+          <p className="text-xs text-slate-400">
+            Se va genera un mesaj HL7 (REF^I12) către sistemul specialistului.
+          </p>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setShowReferralDialog(false)}>Anulează</Button>
+          <Button onClick={handleCreateReferral} disabled={savingReferral}>
+            <Send size={14} /> {savingReferral ? 'Se trimite...' : 'Generează trimiterea'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* HL7 message viewer */}
+      <Dialog open={!!viewMessage} onClose={() => setViewMessage(null)} title="Mesaj HL7" maxWidth="max-w-2xl">
+        <DialogBody>
+          <div className="text-xs text-slate-500 mb-2">
+            {(viewMessage?.direction || '').toUpperCase() === 'OUT' ? 'Trimitere (OUT)' : 'Scrisoare medicală (IN)'} ·{' '}
+            {viewMessage?.transferDate ? new Date(viewMessage.transferDate).toLocaleString('ro-RO') : ''}
+          </div>
+          <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap text-slate-700">
+{viewMessage?.content || ''}
+          </pre>
+        </DialogBody>
+        <DialogFooter>
+          {(viewMessage?.direction || '').toUpperCase() === 'OUT' && (
+            <Button variant="ghost" onClick={() => handleExportHL7(viewMessage)}>
+              <Download size={14} /> Export HL7
+            </Button>
+          )}
+          <Button variant="ghost" onClick={() => setViewMessage(null)}>Închide</Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* Activity recommendation dialog */}
+      <Dialog open={showActivityDialog} onClose={() => setShowActivityDialog(false)} title="Adaugă Recomandare Activitate">
+        <DialogBody className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Tip activitate</label>
+            <select
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+              value={activityForm.activityType}
+              onChange={e => setActivityForm(f => ({ ...f, activityType: e.target.value }))}
+            >
+              {['Mers', 'Alergare', 'Ciclism', 'Alte activități fizice'].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Durată zilnică (minute)</label>
+            <input
+              type="number"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+              value={activityForm.dailyDurationMinutes}
+              onChange={e => setActivityForm(f => ({ ...f, dailyDurationMinutes: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Alte instrucțiuni</label>
+            <textarea
+              rows={3}
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+              value={activityForm.description}
+              onChange={e => setActivityForm(f => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data start</label>
+              <input type="date" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+                value={activityForm.startDate} onChange={e => setActivityForm(f => ({ ...f, startDate: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Data stop</label>
+              <input type="date" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
+                value={activityForm.endDate} onChange={e => setActivityForm(f => ({ ...f, endDate: e.target.value }))} />
+            </div>
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setShowActivityDialog(false)}>Anulează</Button>
+          <Button onClick={handleAddActivityRec} disabled={savingActivity}>
+            {savingActivity ? 'Se salvează...' : 'Adaugă'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       <Dialog open={showRecDialog} onClose={() => setShowRecDialog(false)} title="Adaugă Recomandare">
         <DialogBody className="space-y-4">

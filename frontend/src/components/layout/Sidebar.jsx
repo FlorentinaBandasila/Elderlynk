@@ -2,10 +2,10 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Stethoscope, Radio,
   Bell, BellRing, Settings, ChevronLeft, ChevronRight, Activity,
-  UserPlus, LogOut, HelpCircle,
+  UserPlus, LogOut, HelpCircle, BarChart3,
 } from 'lucide-react'
-import { notifications, alarms } from '@/data/mock'
 import { useAuth, ROLES, ROLE_LABELS } from '@/context/AuthContext'
+import { useActiveAlarmCount } from '@/hooks/useAlarmBadge'
 
 // `roles` lists the role ids allowed to see an item. Omit to allow everyone.
 const navGroups = [
@@ -14,14 +14,15 @@ const navGroups = [
     items: [
       { to: '/',            icon: LayoutDashboard, label: 'Tablou Bord',    end: true },
       { to: '/patients',    icon: Users,            label: 'Pacienți', roles: [ROLES.ADMIN, ROLES.MEDIC, ROLES.SUPRAVEGHETOR] },
-      { to: '/live-alarms', icon: Bell,             label: 'Alarme Live' },
+      { to: '/live-alarms', icon: Bell,             label: 'Alarme Live', roles: [ROLES.ADMIN, ROLES.MEDIC, ROLES.SUPRAVEGHETOR] },
     ],
   },
   {
     label: 'Clinică',
     items: [
-      { to: '/consultations', icon: Stethoscope, label: 'Consultații' },
+      { to: '/consultations', icon: Stethoscope, label: 'Consultații', roles: [ROLES.ADMIN, ROLES.MEDIC, ROLES.SUPRAVEGHETOR] },
       { to: '/sensor-config', icon: Radio,        label: 'Senzori', roles: [ROLES.ADMIN, ROLES.MEDIC, ROLES.SUPRAVEGHETOR] },
+      { to: '/reports',       icon: BarChart3,    label: 'Rapoarte', roles: [ROLES.ADMIN, ROLES.MEDIC, ROLES.SUPRAVEGHETOR] },
     ],
   },
   {
@@ -40,9 +41,6 @@ const navGroups = [
   },
 ]
 
-const unreadNotif  = notifications.filter(n => !n.read).length
-const activeAlarms = alarms.filter(a => a.status === 'Active').length
-
 function initials(name, email) {
   if (name) {
     const parts = name.trim().split(/\s+/)
@@ -54,6 +52,8 @@ function initials(name, email) {
 export default function Sidebar({ collapsed, onToggle }) {
   const { user, hasRole, logout } = useAuth()
   const navigate = useNavigate()
+  const activeAlarms = useActiveAlarmCount()
+  const unreadNotif = activeAlarms
 
   const handleLogout = () => {
     logout()

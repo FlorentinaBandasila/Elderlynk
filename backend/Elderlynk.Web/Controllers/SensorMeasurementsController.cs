@@ -1,6 +1,8 @@
 using Elderlynk.Models;
 using Elderlynk.Services;
+using Elderlynk.Web.Hubs;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Elderlynk.Web.Controllers
 {
@@ -10,11 +12,19 @@ namespace Elderlynk.Web.Controllers
     public class SensorMeasurementsController : ControllerBase
     {
         private readonly ISensorMeasurementService _service;
+        private readonly IAlarmEvaluationService _evaluation;
+        private readonly IHubContext<NotificationsHub> _hub;
         private readonly ILogger<SensorMeasurementsController> _logger;
 
-        public SensorMeasurementsController(ISensorMeasurementService service, ILogger<SensorMeasurementsController> logger)
+        public SensorMeasurementsController(
+            ISensorMeasurementService service,
+            IAlarmEvaluationService evaluation,
+            IHubContext<NotificationsHub> hub,
+            ILogger<SensorMeasurementsController> logger)
         {
             _service = service;
+            _evaluation = evaluation;
+            _hub = hub;
             _logger = logger;
         }
 
@@ -62,6 +72,23 @@ namespace Elderlynk.Web.Controllers
                     return BadRequest(ModelState);
 
                 var result = await _service.CreateAsync(dto, cancellationToken);
+
+                // Auto-evaluate the new reading against the sensor's Annex 3 rules; if it
+                // raises an alarm/warning, push it live to connected supervisors.
+                if (result.SensorId.HasValue)
+                {
+                    try
+                    {
+                        var eval = await _evaluation.EvaluateSensorAsync(result.SensorId.Value, null, cancellationToken);
+                        if (eval.CreatedAlarm != null)
+                            await _hub.Clients.All.SendAsync(NotificationsHub.AlarmRaised, eval.CreatedAlarm, cancellationToken);
+                    }
+                    catch (Exception evalEx)
+                    {
+                        _logger.LogError(evalEx, "Alarm evaluation failed for sensor {SensorId}", result.SensorId);
+                    }
+                }
+
                 return CreatedAtAction(nameof(GetById), new { id = result.MeasurementId }, result);
             }
             catch (Exception ex)

@@ -33,6 +33,20 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        [HttpGet("patient/{patientId}")]
+        public async Task<ActionResult<IEnumerable<RecommendationResponseDto>>> GetByPatient(int patientId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetByPatientAsync(patientId, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving recommendations for patient {Id}", patientId);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
         [HttpGet("{id}")]
         public async Task<ActionResult<RecommendationResponseDto>> GetById(int id, CancellationToken cancellationToken)
         {

@@ -75,6 +75,8 @@ export const mapPatientFromAPI = (apiPatient, index = 0) => {
     postalCode: apiPatient.postalCode || '',
     profession: apiPatient.profession || '',
     workplace: apiPatient.workPlace || '',
+    caregiverId: apiPatient.caregiverId ?? null,
+    caregiverName: apiPatient.caregiverName || '',
     dateAdded: apiPatient.dateAdded,
     lastModified: apiPatient.lastModified,
     active: apiPatient.active,
@@ -123,6 +125,9 @@ export const mapAlarmFromAPI = (apiAlarm) => {
     timestamp: apiAlarm.triggerDate || new Date().toISOString(),
     status: apiAlarm.isResolved ? 'Resolved' : 'Active',
     message: apiAlarm.message || 'No message',
+    resolutionDate: apiAlarm.resolutionDate || null,
+    resolutionNotes: apiAlarm.resolutionNotes || '',
+    supervisorId: apiAlarm.supervisorId ?? null,
   }
 }
 
@@ -220,6 +225,38 @@ export const mapSensorMeasurementToAPI = (measurement) => ({
   value: measurement.value || 0,
 })
 
+/**
+ * Groups PatientMeasurementDto[] by sensor type into chart-ready series:
+ *   { [sensorType]: { unit, thresholds, data: [{ time, label, value }] } }
+ */
+export const groupMeasurementsBySensor = (measurements = []) => {
+  const groups = {}
+  for (const m of measurements) {
+    const type = m.sensorType || `Senzor ${m.sensorId}`
+    if (!groups[type]) {
+      groups[type] = {
+        unit: m.measurementUnit || '',
+        thresholds: {
+          lowAlarm: m.lowerAlarmThreshold ?? null,
+          lowWarn: m.lowerWarningThreshold ?? null,
+          highWarn: m.upperWarningThreshold ?? null,
+          highAlarm: m.upperAlarmThreshold ?? null,
+        },
+        data: [],
+      }
+    }
+    const ts = m.measurementDateTime ? new Date(m.measurementDateTime) : null
+    groups[type].data.push({
+      time: ts
+        ? ts.toLocaleString('ro-RO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : '',
+      ts: ts ? ts.getTime() : 0,
+      value: m.value != null ? Number(m.value) : null,
+    })
+  }
+  return groups
+}
+
 // Map API SensorConfig response to frontend format
 export const mapSensorConfigFromAPI = (apiConfig) => {
   return {
@@ -249,6 +286,8 @@ export const mapSensorConfigFromAPI = (apiConfig) => {
     lastValue: '---',
     unit: apiConfig.measurementUnit || '',
     orderNumber: apiConfig.orderNumber,
+    persistenceSeconds: apiConfig.persistenceSeconds ?? null,
+    activityGraceSeconds: apiConfig.activityGraceSeconds ?? null,
   }
 }
 
@@ -264,6 +303,8 @@ export const mapSensorConfigToAPI = (config) => ({
   upperWarningThreshold: config.upperWarningThreshold,
   upperAlarmThreshold: config.upperAlarmThreshold,
   active: config.active ?? true,
+  persistenceSeconds: config.persistenceSeconds,
+  activityGraceSeconds: config.activityGraceSeconds,
 })
 
 // Map API Recommendation response to frontend format

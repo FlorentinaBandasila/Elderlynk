@@ -13,5 +13,6 @@ namespace Elderlynk.Models
         public string? Email { get; set; }
         public string? Profession { get; set; }
         public string? WorkPlace { get; set; }
+        public int? CaregiverId { get; set; }
     }
 }

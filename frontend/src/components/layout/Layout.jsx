@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false)
+  const location = useLocation()
 
   return (
     <div className="flex min-h-screen">
@@ -12,7 +14,9 @@ export default function Layout() {
         className="flex-1 min-h-screen bg-[#eef2f7] transition-all duration-300"
         style={{ marginLeft: collapsed ? '64px' : '240px' }}
       >
-        <Outlet />
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )

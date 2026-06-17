@@ -12,6 +12,7 @@ namespace Elderlynk.Web.Controllers
     public class PatientsController : ControllerBase
     {
         private const int RoleMedic = 2;
+        private const int RolePatient = 4;
 
         private readonly IPatientService _service;
         private readonly ILogger<PatientsController> _logger;
@@ -42,11 +43,30 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        // Accounts that can be assigned as a patient's caregiver (Utilizatori with ID_Rol = 5).
+        // Used to populate the caregiver dropdown when adding a patient (Admin/Medic).
+        [HttpGet("caregivers")]
+        [Authorize(Roles = "1,2")]
+        public async Task<ActionResult<IEnumerable<UserResponseDto>>> GetCaregivers(CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetCaregiversAsync(cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving caregivers");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
         [HttpGet("{id}")]
         public async Task<ActionResult<PatientResponseDto>> GetById(int id, CancellationToken cancellationToken)
         {
             try
             {
+                if (PatientAccessingOther(id)) return Forbid();
+
                 var patient = await _service.GetByIdAsync(id, cancellationToken);
                 if (patient == null)
                     return NotFound();
@@ -65,6 +85,7 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
+                if (PatientAccessingOther(id)) return Forbid();
                 return Ok(await _service.GetAllergiesAsync(id, cancellationToken));
             }
             catch (Exception ex)
@@ -79,6 +100,7 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
+                if (PatientAccessingOther(id)) return Forbid();
                 return Ok(await _service.GetHistoryAsync(id, cancellationToken));
             }
             catch (Exception ex)
@@ -93,6 +115,7 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
+                if (PatientAccessingOther(id)) return Forbid();
                 return Ok(await _service.GetMedicationsAsync(id, cancellationToken));
             }
             catch (Exception ex)
@@ -168,11 +191,51 @@ namespace Elderlynk.Web.Controllers
         {
             try
             {
+                if (PatientAccessingOther(id)) return Forbid();
                 return Ok(await _service.GetActivityAsync(id, cancellationToken));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving activity for patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        // A patient updates their own demographic/contact data ("enter own medical data when able to").
+        // Caregiver assignment is never patient-editable, so it is forced to null here.
+        [HttpPut("me")]
+        [Authorize(Roles = "4")]
+        public async Task<ActionResult<PatientResponseDto>> UpdateSelf([FromBody] UpdatePatientDto dto, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var id = User.GetUserId();
+                dto.CaregiverId = null;
+                var updated = await _service.UpdateAsync(id, dto, id, Ip(), cancellationToken);
+                return updated == null ? NotFound() : Ok(updated);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating own patient profile");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("{id}/measurements")]
+        public async Task<ActionResult<IEnumerable<PatientMeasurementDto>>> GetMeasurements(
+            int id, [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // A patient may only read their own readings; staff are scoped at the list level.
+                if (User.GetRole() == RolePatient && User.GetUserId() != id)
+                    return Forbid();
+
+                return Ok(await _service.GetMeasurementsAsync(id, from, to, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving measurements for patient {Id}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -210,5 +273,8 @@ namespace Elderlynk.Web.Controllers
             => await _service.DeleteMedicationAsync(medicationId, User.GetUserId(), Ip(), cancellationToken) ? NoContent() : NotFound();
 
         private string? Ip() => HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        /// <summary>A patient may only access their own record; everyone else passes through.</summary>
+        private bool PatientAccessingOther(int id) => User.GetRole() == RolePatient && User.GetUserId() != id;
     }
 }

@@ -31,6 +31,27 @@ namespace Elderlynk.Services
             });
         }
 
+        public async Task<IEnumerable<RecommendationResponseDto>> GetByPatientAsync(int patientId, CancellationToken cancellationToken = default)
+        {
+            var recommendations = await _context.Set<Recommendation>()
+                .AsNoTracking()
+                .Where(r => r.PatientId == patientId)
+                .OrderByDescending(r => r.StartDate)
+                .ToListAsync(cancellationToken);
+
+            return recommendations.Select(r => new RecommendationResponseDto
+            {
+                RecommendationId = r.RecommendationId,
+                PatientId = r.PatientId,
+                DoctorId = r.DoctorId,
+                ActivityType = r.ActivityType,
+                DailyDurationMinutes = r.DailyDurationMinutes,
+                Description = r.Description,
+                StartDate = r.StartDate,
+                StopDate = r.StopDate
+            });
+        }
+
         public async Task<RecommendationResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
             var recommendation = await _context.Set<Recommendation>()

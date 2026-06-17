@@ -14,5 +14,7 @@ namespace Elderlynk.Models
         public decimal? UpperWarningThreshold { get; set; }
         public decimal? UpperAlarmThreshold { get; set; }
         public bool? Active { get; set; }
+        public int? PersistenceSeconds { get; set; }
+        public int? ActivityGraceSeconds { get; set; }
     }
 }

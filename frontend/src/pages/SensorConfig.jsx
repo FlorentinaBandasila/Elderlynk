@@ -73,8 +73,19 @@ export default function SensorConfig() {
 
   const openEdit = s => {
     setEditSensor(s)
-    setForm({ status: s.status, sampleRate: s.sampleRate, thresholdMin: s.thresholdMin, thresholdMax: s.thresholdMax, location: s.location })
+    setForm({
+      status: s.status,
+      sampleRate: s.sampleRate,
+      lowerAlarm: s.lowerAlarmThreshold,
+      lowerWarning: s.lowerWarningThreshold,
+      upperWarning: s.upperWarningThreshold,
+      upperAlarm: s.upperAlarmThreshold,
+      persistenceSeconds: s.persistenceSeconds ?? '',
+      activityGraceSeconds: s.activityGraceSeconds ?? '',
+    })
   }
+
+  const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
 
   const saveEdit = async () => {
     try {
@@ -84,19 +95,36 @@ export default function SensorConfig() {
         orderNumber: editSensor.orderNumber,
         sensorType: editSensor.sensorType,
         measurementUnit: editSensor.measurementUnit,
-        samplingPeriodSeconds: form.sampleRate || editSensor.samplingPeriodSeconds,
+        samplingPeriodSeconds: num(form.sampleRate) || editSensor.samplingPeriodSeconds,
         scaleFactor: editSensor.scaleFactor,
-        lowerAlarmThreshold: form.thresholdMin,
-        upperAlarmThreshold: form.thresholdMax,
+        lowerAlarmThreshold: num(form.lowerAlarm),
+        lowerWarningThreshold: num(form.lowerWarning),
+        upperWarningThreshold: num(form.upperWarning),
+        upperAlarmThreshold: num(form.upperAlarm),
+        persistenceSeconds: num(form.persistenceSeconds),
+        activityGraceSeconds: num(form.activityGraceSeconds),
         active: form.status === 'Online',
       }
 
       await sensorConfigAPI.update(sensorId, updateData)
 
-      setSensors(prev => prev.map(s => s.id === editSensor.id ? { ...s, ...form } : s))
+      setSensors(prev => prev.map(s => s.id === editSensor.id ? {
+        ...s,
+        status: form.status,
+        sampleRate: num(form.sampleRate) || s.sampleRate,
+        lowerAlarmThreshold: num(form.lowerAlarm),
+        lowerWarningThreshold: num(form.lowerWarning),
+        upperWarningThreshold: num(form.upperWarning),
+        upperAlarmThreshold: num(form.upperAlarm),
+        thresholdMin: num(form.lowerAlarm),
+        thresholdMax: num(form.upperAlarm),
+        persistenceSeconds: num(form.persistenceSeconds),
+        activityGraceSeconds: num(form.activityGraceSeconds),
+      } : s))
       setEditSensor(null)
     } catch (error) {
       console.error('Error updating sensor:', error)
+      alert('Nu s-au putut salva modificările senzorului.')
     }
   }
 
@@ -276,40 +304,61 @@ export default function SensorConfig() {
               onChange={e => setForm(f => ({ ...f, sampleRate: Number(e.target.value) }))}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Threshold Min
-              </label>
-              <input
-                type="number"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
-                value={form.thresholdMin}
-                onChange={e => setForm(f => ({ ...f, thresholdMin: Number(e.target.value) }))}
-              />
+          {/* Valori normale / praguri per pacient (4 benzi) */}
+          <div>
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              Praguri (valori normale pacient)
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Threshold Max
-              </label>
-              <input
-                type="number"
-                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
-                value={form.thresholdMax}
-                onChange={e => setForm(f => ({ ...f, thresholdMax: Number(e.target.value) }))}
-              />
+            <p className="text-xs text-slate-400 mb-2">
+              Intervalul normal este între pragul de atenționare inferior și cel superior.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['lowerAlarm', 'Alarmă inferioară'],
+                ['lowerWarning', 'Atenționare inferioară'],
+                ['upperWarning', 'Atenționare superioară'],
+                ['upperAlarm', 'Alarmă superioară'],
+              ].map(([key, label]) => (
+                <div key={key}>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">{label}</label>
+                  <input
+                    type="number"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none"
+                    value={form[key] ?? ''}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                  />
+                </div>
+              ))}
             </div>
           </div>
+
+          {/* Reguli alarmă (Anexa 3) */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              Location
-            </label>
-            <input
-              type="text"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
-              value={form.location}
-              onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-            />
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              Reguli alarmă (Anexa 3)
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Durată persistență (s)</label>
+                <input
+                  type="number"
+                  placeholder="ex. 30"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none"
+                  value={form.persistenceSeconds ?? ''}
+                  onChange={e => setForm(f => ({ ...f, persistenceSeconds: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Toleranță post-activitate (s)</label>
+                <input
+                  type="number"
+                  placeholder="ex. 300"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none"
+                  value={form.activityGraceSeconds ?? ''}
+                  onChange={e => setForm(f => ({ ...f, activityGraceSeconds: e.target.value }))}
+                />
+              </div>
+            </div>
           </div>
         </DialogBody>
         <DialogFooter>

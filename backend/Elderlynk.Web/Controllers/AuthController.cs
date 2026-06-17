@@ -96,6 +96,30 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        /// <summary>Resets the password of any account (staff or patient). Admin only.</summary>
+        [HttpPost("reset-password")]
+        [Authorize(Roles = "1")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto, CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                await _auth.ResetPasswordAsync(dto.UserType, dto.UserId, dto.NewPassword, User.GetUserId(), GetSourceIp(), cancellationToken);
+                return NoContent();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Contul specificat nu a fost găsit." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resetting password for {UserType} {UserId}", dto.UserType, dto.UserId);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
         /// <summary>Returns the current user decoded from the token (refreshed from the database).</summary>
         [HttpGet("me")]
         [Authorize]

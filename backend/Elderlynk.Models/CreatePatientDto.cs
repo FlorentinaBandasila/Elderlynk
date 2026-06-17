@@ -15,6 +15,9 @@ namespace Elderlynk.Models
         public string? Profession { get; set; }
         public string? WorkPlace { get; set; }
 
+        // Îngrijitorul asignat (Utilizatori.ID_Utilizator cu ID_Rol = 5).
+        public int? CaregiverId { get; set; }
+
         // ===== Date medicale (optionale, adaugate odata cu pacientul) =====
         public List<CreateAllergyDto>? Allergies { get; set; }
         public List<CreateMedicalHistoryDto>? MedicalHistory { get; set; }

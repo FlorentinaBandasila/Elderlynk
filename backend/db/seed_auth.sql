@@ -29,7 +29,14 @@ IF NOT EXISTS (SELECT 1 FROM dbo.Roluri WHERE ID_Rol = 3)
     INSERT INTO dbo.Roluri (ID_Rol, Nume_Rol) VALUES (3, N'Supraveghetor');
 IF NOT EXISTS (SELECT 1 FROM dbo.Roluri WHERE ID_Rol = 4)
     INSERT INTO dbo.Roluri (ID_Rol, Nume_Rol) VALUES (4, N'Pacient');
+IF NOT EXISTS (SELECT 1 FROM dbo.Roluri WHERE ID_Rol = 5)
+    INSERT INTO dbo.Roluri (ID_Rol, Nume_Rol) VALUES (5, N'Ingrijitor');
 -- SET IDENTITY_INSERT dbo.Roluri OFF;
+
+/* ---------- 1b) Pacienti.ID_Ingrijitor (FK -> Utilizatori, ID_Rol = 5) ----- */
+IF NOT EXISTS (SELECT 1 FROM sys.columns
+               WHERE object_id = OBJECT_ID(N'dbo.Pacienti') AND name = N'ID_Ingrijitor')
+    ALTER TABLE dbo.Pacienti ADD ID_Ingrijitor INT NULL;
 
 /* ---------- 2) Admin (Utilizatori, ID_Rol = 1) ----------------------------- */
 IF NOT EXISTS (SELECT 1 FROM dbo.Utilizatori WHERE Email = N'admin@carelink.local')
@@ -63,3 +70,10 @@ FROM dbo.Utilizatori u
 LEFT JOIN dbo.Roluri r ON r.ID_Rol = u.ID_Rol
 WHERE u.Email IN (N'admin@carelink.local', N'medic@carelink.local');
 SELECT ID_Pacient, Email FROM dbo.Pacienti WHERE Email = N'pacient@carelink.local';
+
+
+
+    INSERT INTO dbo.Utilizatori (ID_Rol, Email, Parola_Hash, Nume, Prenume, Telefon, Data_Creare, Activ)
+    VALUES (5, N'ingrijitor@carelink.local',
+            N'$2a$11$VsBv1DMItvk/yfdyY.HjXev20u/SNy/8a3R3ZlvrBBHJs66abkndy', -- Medic123!
+            N'George', N'Laurentiu', NULL, SYSDATETIMEOFFSET(), 1);

@@ -18,5 +18,11 @@ namespace Elderlynk.Services
 
         /// <summary>Rebuilds an AuthPrincipal for the current token holder (used by /me).</summary>
         Task<AuthPrincipal?> GetPrincipalAsync(int userId, string userType, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Admin-initiated password reset. <paramref name="userType"/> is "user" (Utilizatori) or
+        /// "patient" (Pacienti). Throws <see cref="KeyNotFoundException"/> when the target does not exist.
+        /// </summary>
+        Task ResetPasswordAsync(string userType, int targetId, string newPassword, int actingAdminId, string? sourceIp, CancellationToken cancellationToken = default);
     }
 }

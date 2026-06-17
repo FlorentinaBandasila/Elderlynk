@@ -90,6 +90,8 @@ namespace Elderlynk.Web
                 entity.Property(e => e.LastName)
                     .HasMaxLength(100)
                     .HasColumnName("Nume");
+                entity.Property(e => e.CaregiverId)
+                    .HasColumnName("ID_Ingrijitor");
             });
 
             modelBuilder.Entity<UserRole>(entity =>

@@ -6,6 +6,7 @@ export const ROLES = {
   MEDIC: 2,
   SUPRAVEGHETOR: 3,
   PACIENT: 4,
+  INGRIJITOR: 5,
 }
 
 export const ROLE_LABELS = {
@@ -13,9 +14,15 @@ export const ROLE_LABELS = {
   2: 'Medic',
   3: 'Supraveghetor',
   4: 'Pacient',
+  5: 'Îngrijitor',
 }
 
 const AuthContext = createContext(null)
+
+// Auto-logout after this much user inactivity (no mouse/keyboard/touch).
+export const IDLE_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes
+// sessionStorage flag so the login screen can show "Sesiunea a expirat".
+export const SESSION_EXPIRED_KEY = 'cl_session_expired'
 
 /** Decodes a JWT payload (no verification — only used for the exp check). */
 function decodeJwt(token) {
@@ -61,10 +68,10 @@ export function AuthProvider({ children }) {
     if (!claims?.exp) return
     const ms = claims.exp * 1000 - Date.now()
     if (ms <= 0) {
-      logout()
+      logout({ expired: true })
       return
     }
-    const timer = setTimeout(() => logout(), ms)
+    const timer = setTimeout(() => logout({ expired: true }), ms)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
@@ -85,10 +92,31 @@ export function AuthProvider({ children }) {
     return profile
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback((opts) => {
+    // Mark the session as expired (vs. a manual "Deconectare") so Login can explain why.
+    if (opts?.expired) sessionStorage.setItem(SESSION_EXPIRED_KEY, '1')
     clearToken()
     setUser(null)
   }, [])
+
+  // Auto-logout after IDLE_TIMEOUT_MS of inactivity. Any user interaction resets the timer.
+  useEffect(() => {
+    if (!user) return
+
+    let timer
+    const reset = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => logout({ expired: true }), IDLE_TIMEOUT_MS)
+    }
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click']
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
+    reset() // start counting from mount
+
+    return () => {
+      clearTimeout(timer)
+      events.forEach((e) => window.removeEventListener(e, reset))
+    }
+  }, [user, logout])
 
   const hasRole = useCallback(
     (roleId) => !!user && (user.roles?.includes(roleId) || user.role === roleId),

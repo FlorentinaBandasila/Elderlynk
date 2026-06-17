@@ -46,6 +46,8 @@ const request = async (path, { method = 'GET', body, auth = true } = {}) => {
   // request itself (auth: false) a 401 means bad credentials – let it fall through.
   if (res.status === 401 && auth) {
     clearToken()
+    // Flag read by the Login screen (matches SESSION_EXPIRED_KEY in AuthContext).
+    sessionStorage.setItem('cl_session_expired', '1')
     if (window.location.pathname !== '/login') {
       window.location.assign('/login')
     }
@@ -71,12 +73,17 @@ export const authAPI = {
   registerPacient: (data) =>
     request('/auth/register-pacient', { method: 'POST', body: data }),
 
+  // Admin-only: reset any account's password. userType is 'user' or 'patient'.
+  resetPassword: ({ userType, userId, newPassword }) =>
+    request('/auth/reset-password', { method: 'POST', body: { userType, userId, newPassword } }),
+
   me: () => request('/auth/me'),
 }
 
 // ============ PATIENTS ============
 export const patientAPI = {
   getAll: () => request('/Patients'),
+  getCaregivers: () => request('/Patients/caregivers'),
   getById: (id) => request(`/Patients/${id}`),
   create: (data) => request('/Patients', { method: 'POST', body: data }),
   update: (id, data) => request(`/Patients/${id}`, { method: 'PUT', body: data }),
@@ -85,6 +92,14 @@ export const patientAPI = {
   getHistory: (id) => request(`/Patients/${id}/history`),
   getMedications: (id) => request(`/Patients/${id}/medications`),
   getActivity: (id) => request(`/Patients/${id}/activity`),
+  getMeasurements: (id, { from, to } = {}) => {
+    const qs = new URLSearchParams()
+    if (from) qs.set('from', from)
+    if (to) qs.set('to', to)
+    const q = qs.toString()
+    return request(`/Patients/${id}/measurements${q ? `?${q}` : ''}`)
+  },
+  updateSelf: (data) => request('/Patients/me', { method: 'PUT', body: data }),
   updateAllergy: (allergyId, data) => request(`/Patients/allergies/${allergyId}`, { method: 'PUT', body: data }),
   deleteAllergy: (allergyId) => request(`/Patients/allergies/${allergyId}`, { method: 'DELETE' }),
   updateHistory: (historyId, data) => request(`/Patients/history/${historyId}`, { method: 'PUT', body: data }),
@@ -99,6 +114,7 @@ export const alarmAPI = {
   getById: (id) => request(`/alarms/${id}`),
   create: (data) => request('/alarms', { method: 'POST', body: data }),
   update: (id, data) => request(`/alarms/${id}`, { method: 'PUT', body: data }),
+  resolve: (id, notes) => request(`/alarms/${id}/resolve`, { method: 'POST', body: { notes: notes || '' } }),
   delete: (id) => request(`/alarms/${id}`, { method: 'DELETE' }),
 }
 
@@ -143,6 +159,7 @@ export const sensorConfigAPI = {
 // ============ RECOMMENDATIONS ============
 export const recommendationAPI = {
   getAll: () => request('/recommendations'),
+  getByPatient: (patientId) => request(`/recommendations/patient/${patientId}`),
   getById: (id) => request(`/recommendations/${id}`),
   create: (data) => request('/recommendations', { method: 'POST', body: data }),
   update: (id, data) => request(`/recommendations/${id}`, { method: 'PUT', body: data }),
@@ -153,6 +170,7 @@ export const recommendationAPI = {
 export const medicalRecommendationAPI = {
   getAll: () => request('/medicalrecommendations'),
   getByPatientId: (patientId) => request(`/medicalrecommendations/patient/${patientId}`),
+  // (recommendationAPI.getByPatient mirrors this for activity recommendations)
   create: (data) => request('/medicalrecommendations', { method: 'POST', body: data }),
   update: (id, data) => request(`/medicalrecommendations/${id}`, { method: 'PUT', body: data }),
   delete: (id) => request(`/medicalrecommendations/${id}`, { method: 'DELETE' }),
@@ -189,7 +207,10 @@ export const auditLogAPI = {
 export const hl7MessageAPI = {
   getAll: () => request('/hl7messages'),
   getById: (id) => request(`/hl7messages/${id}`),
+  getByPatient: (patientId) => request(`/hl7messages/patient/${patientId}`),
   create: (data) => request('/hl7messages', { method: 'POST', body: data }),
+  referral: (data) => request('/hl7messages/referral', { method: 'POST', body: data }),
+  reply: (referralId) => request(`/hl7messages/${referralId}/reply`, { method: 'POST' }),
   update: (id, data) => request(`/hl7messages/${id}`, { method: 'PUT', body: data }),
   delete: (id) => request(`/hl7messages/${id}`, { method: 'DELETE' }),
 }
@@ -210,6 +231,11 @@ export const supervisorAPI = {
   create: (data) => request('/supervisors', { method: 'POST', body: data }),
   update: (id, data) => request(`/supervisors/${id}`, { method: 'PUT', body: data }),
   delete: (id) => request(`/supervisors/${id}`, { method: 'DELETE' }),
+}
+
+// ============ REPORTS ============
+export const reportAPI = {
+  getOverview: () => request('/reports/overview'),
 }
 
 // ============ USERS (UTILIZATORI) ============

@@ -175,6 +175,34 @@ namespace Elderlynk.Services
             };
         }
 
+        public async Task ResetPasswordAsync(string userType, int targetId, string newPassword, int actingAdminId, string? sourceIp, CancellationToken cancellationToken = default)
+        {
+            var hash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+
+            if (userType == "patient")
+            {
+                var patient = await _context.Set<Patient>()
+                    .FirstOrDefaultAsync(p => p.PatientId == targetId, cancellationToken);
+                if (patient == null)
+                    throw new KeyNotFoundException($"Patient {targetId} not found.");
+
+                patient.PasswordHash = hash;
+                AuditHelper.Add(_context, actingAdminId, "RESET_PASSWORD", "Pacienti", sourceIp, patient.PatientId);
+            }
+            else
+            {
+                var user = await _context.Set<User>()
+                    .FirstOrDefaultAsync(u => u.UserId == targetId, cancellationToken);
+                if (user == null)
+                    throw new KeyNotFoundException($"User {targetId} not found.");
+
+                user.PasswordHash = hash;
+                AuditHelper.Add(_context, actingAdminId, "RESET_PASSWORD", "Utilizatori", sourceIp);
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
         /// <summary>A staff account carries a single role via Utilizatori.ID_Rol.</summary>
         private static int[] RolesOf(User user) =>
             user.RoleId.HasValue ? new[] { user.RoleId.Value } : Array.Empty<int>();

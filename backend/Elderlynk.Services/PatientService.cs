@@ -10,6 +10,7 @@ namespace Elderlynk.Services
         private const int RoleMedic = 2;
         private const int RoleSupervisor = 3;
         private const int RolePatient = 4;
+        private const int RoleCaregiver = 5;
 
         /// <summary>Default login password assigned to a newly created patient.</summary>
         public const string DefaultPatientPassword = "Pacient123!";
@@ -28,7 +29,28 @@ namespace Elderlynk.Services
                 .Where(p => p.Active)
                 .ToListAsync(cancellationToken);
 
-            return patients.Select(Map);
+            return await MapManyAsync(patients, cancellationToken);
+        }
+
+        /// <summary>Lists the active accounts that can be assigned to a patient as caregivers (ID_Rol = 5).</summary>
+        public async Task<IEnumerable<UserResponseDto>> GetCaregiversAsync(CancellationToken cancellationToken = default)
+        {
+            var caregivers = await _context.Set<User>()
+                .AsNoTracking()
+                .Where(u => u.RoleId == RoleCaregiver && (u.Active == null || u.Active == true))
+                .OrderBy(u => u.LastName).ThenBy(u => u.FirstName)
+                .ToListAsync(cancellationToken);
+
+            return caregivers.Select(u => new UserResponseDto
+            {
+                UserId = u.UserId,
+                Email = u.Email,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                Phone = u.Phone,
+                CreatedDate = u.CreatedDate,
+                Active = u.Active
+            });
         }
 
         public async Task<IEnumerable<PatientResponseDto>> GetForUserAsync(int userId, int role, CancellationToken cancellationToken = default)
@@ -61,7 +83,7 @@ namespace Elderlynk.Services
             }
 
             var patients = await query.ToListAsync(cancellationToken);
-            return patients.Select(Map);
+            return await MapManyAsync(patients, cancellationToken);
         }
 
         public async Task<PatientResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -70,7 +92,10 @@ namespace Elderlynk.Services
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.PatientId == id, cancellationToken);
 
-            return patient == null ? null : Map(patient);
+            if (patient == null) return null;
+            var dto = Map(patient);
+            dto.CaregiverName = await GetCaregiverNameAsync(patient.CaregiverId, cancellationToken);
+            return dto;
         }
 
         public async Task<PatientResponseDto> CreateAsync(CreatePatientDto dto, int? linkMedicId, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default)
@@ -88,6 +113,7 @@ namespace Elderlynk.Services
                 Email = dto.Email,
                 Profession = dto.Profession,
                 WorkPlace = dto.WorkPlace,
+                CaregiverId = dto.CaregiverId,
                 // Parola_Hash is NOT NULL in the DB. New patients get a default password
                 // (DefaultPatientPassword) which they can change later; stored as a BCrypt hash.
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(DefaultPatientPassword),
@@ -184,7 +210,9 @@ namespace Elderlynk.Services
                 string.IsNullOrWhiteSpace(createdName) ? $"CNP: {patient.CNP}" : $"Pacient: {createdName}");
             await _context.SaveChangesAsync(cancellationToken);
 
-            return Map(patient);
+            var created = Map(patient);
+            created.CaregiverName = await GetCaregiverNameAsync(patient.CaregiverId, cancellationToken);
+            return created;
         }
 
         public async Task<PatientResponseDto?> UpdateAsync(int id, UpdatePatientDto dto, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default)
@@ -206,13 +234,16 @@ namespace Elderlynk.Services
             if (dto.Email != null) { changes.Add(AuditHelper.Diff("Email", patient.Email, dto.Email)); patient.Email = dto.Email; }
             if (dto.Profession != null) { changes.Add(AuditHelper.Diff("Profesie", patient.Profession, dto.Profession)); patient.Profession = dto.Profession; }
             if (dto.WorkPlace != null) { changes.Add(AuditHelper.Diff("Loc de muncă", patient.WorkPlace, dto.WorkPlace)); patient.WorkPlace = dto.WorkPlace; }
+            if (dto.CaregiverId.HasValue) { changes.Add(AuditHelper.Diff("Îngrijitor", patient.CaregiverId?.ToString(), dto.CaregiverId.ToString())); patient.CaregiverId = dto.CaregiverId; }
             patient.LastModified = DateTime.UtcNow;
 
             var details = string.Join("; ", changes.Where(c => c != null));
             AuditHelper.Add(_context, actingUserId, "UPDATE_PATIENT", "Pacienti", sourceIp, patient.PatientId,
                 string.IsNullOrEmpty(details) ? null : details);
             await _context.SaveChangesAsync(cancellationToken);
-            return Map(patient);
+            var updated = Map(patient);
+            updated.CaregiverName = await GetCaregiverNameAsync(patient.CaregiverId, cancellationToken);
+            return updated;
         }
 
         public async Task<bool> DeleteAsync(int id, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default)
@@ -421,6 +452,52 @@ namespace Elderlynk.Services
             });
         }
 
+        public async Task<IEnumerable<PatientMeasurementDto>> GetMeasurementsAsync(
+            int patientId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
+        {
+            // Resolve the patient's sensors: Device(ID_Pacient) -> SensorConfig(ID_Dispozitiv).
+            var sensors = await (
+                from s in _context.Set<SensorConfig>().AsNoTracking()
+                join d in _context.Set<Device>().AsNoTracking() on s.DeviceId equals d.DeviceId
+                where d.PatientId == patientId
+                select s
+            ).ToListAsync(cancellationToken);
+
+            if (sensors.Count == 0)
+                return Enumerable.Empty<PatientMeasurementDto>();
+
+            var sensorIds = sensors.Select(s => s.SensorId).ToList();
+            var meta = sensors.ToDictionary(s => s.SensorId);
+
+            var query = _context.Set<SensorMeasurement>().AsNoTracking()
+                .Where(m => m.SensorId.HasValue && sensorIds.Contains(m.SensorId.Value));
+
+            if (from.HasValue) query = query.Where(m => m.MeasurementDateTime >= from.Value);
+            if (to.HasValue) query = query.Where(m => m.MeasurementDateTime <= to.Value);
+
+            var measurements = await query
+                .OrderBy(m => m.MeasurementDateTime)
+                .ToListAsync(cancellationToken);
+
+            return measurements.Select(m =>
+            {
+                meta.TryGetValue(m.SensorId!.Value, out var s);
+                return new PatientMeasurementDto
+                {
+                    MeasurementId = m.MeasurementId,
+                    SensorId = m.SensorId.Value,
+                    SensorType = s?.SensorType,
+                    MeasurementUnit = s?.MeasurementUnit,
+                    Value = m.Value,
+                    MeasurementDateTime = m.MeasurementDateTime,
+                    LowerAlarmThreshold = s?.LowerAlarmThreshold,
+                    LowerWarningThreshold = s?.LowerWarningThreshold,
+                    UpperWarningThreshold = s?.UpperWarningThreshold,
+                    UpperAlarmThreshold = s?.UpperAlarmThreshold,
+                };
+            });
+        }
+
         private static PatientResponseDto Map(Patient p) => new()
         {
             PatientId = p.PatientId,
@@ -435,9 +512,45 @@ namespace Elderlynk.Services
             Email = p.Email,
             Profession = p.Profession,
             WorkPlace = p.WorkPlace,
+            CaregiverId = p.CaregiverId,
             DateAdded = p.DateAdded,
             LastModified = p.LastModified,
             Active = p.Active
         };
+
+        /// <summary>Maps a batch of patients, resolving caregiver names in a single query.</summary>
+        private async Task<IEnumerable<PatientResponseDto>> MapManyAsync(List<Patient> patients, CancellationToken cancellationToken)
+        {
+            var dtos = patients.Select(Map).ToList();
+
+            var caregiverIds = patients.Where(p => p.CaregiverId.HasValue)
+                .Select(p => p.CaregiverId!.Value).Distinct().ToList();
+            if (caregiverIds.Count == 0)
+                return dtos;
+
+            var names = await _context.Set<User>()
+                .AsNoTracking()
+                .Where(u => caregiverIds.Contains(u.UserId))
+                .ToDictionaryAsync(u => u.UserId, FullName, cancellationToken);
+
+            foreach (var dto in dtos)
+            {
+                if (dto.CaregiverId.HasValue && names.TryGetValue(dto.CaregiverId.Value, out var n))
+                    dto.CaregiverName = n;
+            }
+            return dtos;
+        }
+
+        private async Task<string?> GetCaregiverNameAsync(int? caregiverId, CancellationToken cancellationToken)
+        {
+            if (!caregiverId.HasValue) return null;
+            var user = await _context.Set<User>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserId == caregiverId.Value, cancellationToken);
+            return user == null ? null : FullName(user);
+        }
+
+        private static string FullName(User u) =>
+            string.Join(' ', new[] { u.FirstName, u.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
     }
 }

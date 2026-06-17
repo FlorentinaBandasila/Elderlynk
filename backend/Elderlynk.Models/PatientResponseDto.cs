@@ -14,6 +14,8 @@ namespace Elderlynk.Models
         public string? Email { get; set; }
         public string? Profession { get; set; }
         public string? WorkPlace { get; set; }
+        public int? CaregiverId { get; set; }
+        public string? CaregiverName { get; set; }
         public DateTime? DateAdded { get; set; }
         public DateTime? LastModified { get; set; }
         public bool Active { get; set; }

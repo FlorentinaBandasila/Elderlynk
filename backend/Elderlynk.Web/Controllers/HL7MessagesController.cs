@@ -51,6 +51,57 @@ namespace Elderlynk.Web.Controllers
             }
         }
 
+        [HttpGet("patient/{patientId}")]
+        public async Task<ActionResult<IEnumerable<HL7MessageResponseDto>>> GetByPatient(int patientId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return Ok(await _service.GetByPatientAsync(patientId, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving HL7 messages for patient {Id}", patientId);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        // Generate an outbound HL7 referral to a specialist (doctors/admin only).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = "1,2")]
+        [HttpPost("referral")]
+        public async Task<ActionResult<HL7MessageResponseDto>> Referral([FromBody] GenerateReferralDto dto, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (dto == null || dto.PatientId <= 0)
+                    return BadRequest("PatientId is required.");
+
+                var result = await _service.GenerateReferralAsync(dto, cancellationToken);
+                return CreatedAtAction(nameof(GetById), new { id = result.MessageId }, result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating HL7 referral");
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        // Simulate receiving the specialist's medical letter for a referral (doctors/admin only).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = "1,2")]
+        [HttpPost("{id}/reply")]
+        public async Task<ActionResult<HL7MessageResponseDto>> Reply(int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var result = await _service.GenerateReplyAsync(id, cancellationToken);
+                return result == null ? NotFound() : Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating HL7 medical letter for referral {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
         [HttpPost]
         public async Task<ActionResult<HL7MessageResponseDto>> Create(
             [FromBody] CreateHL7MessageDto dto,

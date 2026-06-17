@@ -235,6 +235,26 @@ namespace Elderlynk.Services
             await _context.SaveChangesAsync(cancellationToken);
         }
 
+        public async Task<AlarmResponseDto?> ResolveAsync(int id, int supervisorId, string? notes, CancellationToken cancellationToken = default)
+        {
+            var alarm = await _context.Set<Alarm>()
+                .FirstOrDefaultAsync(a => a.AlarmId == id, cancellationToken);
+
+            if (alarm == null)
+                return null;
+
+            alarm.IsResolved = true;
+            alarm.ResolutionDate = DateTime.Now;   // recorded automatically
+            alarm.SupervisorId = supervisorId;
+            if (notes != null)
+                alarm.ResolutionNotes = notes;
+
+            _context.Set<Alarm>().Update(alarm);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return await GetByIdAsync(id, cancellationToken);
+        }
+
         public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
         {
             var alarm = await _context.Set<Alarm>()

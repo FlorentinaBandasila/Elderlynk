@@ -7,16 +7,15 @@ import {
 import { Card, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
-import { patients, alarms, sensors } from '@/data/mock'
 import { patientAPI, alarmAPI, sensorConfigAPI } from '@/services/api'
 import { mapPatientFromAPI, mapAlarmFromAPI, mapSensorConfigFromAPI } from '@/services/mappers'
 
 const severityVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'gray' }
 
-// Use mock data as fallback
-let allActive = alarms.filter(a => a.status === 'Active')
-let criticalAlarm = allActive.find(a => a.severity === 'Critical')
-let offlineSensors = sensors.filter(s => s.status === 'Offline')
+// Derived from live API data (recomputed each render below).
+let allActive = []
+let criticalAlarm = undefined
+let offlineSensors = []
 
 const fmt = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 

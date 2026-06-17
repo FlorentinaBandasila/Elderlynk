@@ -38,7 +38,9 @@ namespace Elderlynk.Services
                 LowerWarningThreshold = c.LowerWarningThreshold,
                 UpperWarningThreshold = c.UpperWarningThreshold,
                 UpperAlarmThreshold = c.UpperAlarmThreshold,
-                Active = c.Active
+                Active = c.Active,
+                PersistenceSeconds = c.PersistenceSeconds,
+                ActivityGraceSeconds = c.ActivityGraceSeconds
             });
         }
 
@@ -119,7 +121,9 @@ namespace Elderlynk.Services
                 LowerWarningThreshold = config.LowerWarningThreshold,
                 UpperWarningThreshold = config.UpperWarningThreshold,
                 UpperAlarmThreshold = config.UpperAlarmThreshold,
-                Active = config.Active
+                Active = config.Active,
+                PersistenceSeconds = config.PersistenceSeconds,
+                ActivityGraceSeconds = config.ActivityGraceSeconds
             };
         }
 
@@ -138,7 +142,9 @@ namespace Elderlynk.Services
                 LowerWarningThreshold = dto.LowerWarningThreshold,
                 UpperWarningThreshold = dto.UpperWarningThreshold,
                 UpperAlarmThreshold = dto.UpperAlarmThreshold,
-                Active = dto.Active ?? true
+                Active = dto.Active ?? true,
+                PersistenceSeconds = dto.PersistenceSeconds,
+                ActivityGraceSeconds = dto.ActivityGraceSeconds
             };
 
             _context.Set<SensorConfig>().Add(config);
@@ -158,7 +164,9 @@ namespace Elderlynk.Services
                 LowerWarningThreshold = config.LowerWarningThreshold,
                 UpperWarningThreshold = config.UpperWarningThreshold,
                 UpperAlarmThreshold = config.UpperAlarmThreshold,
-                Active = config.Active
+                Active = config.Active,
+                PersistenceSeconds = config.PersistenceSeconds,
+                ActivityGraceSeconds = config.ActivityGraceSeconds
             };
         }
 
@@ -194,6 +202,10 @@ namespace Elderlynk.Services
                 config.UpperAlarmThreshold = dto.UpperAlarmThreshold;
             if (dto.Active.HasValue)
                 config.Active = dto.Active;
+            if (dto.PersistenceSeconds.HasValue)
+                config.PersistenceSeconds = dto.PersistenceSeconds;
+            if (dto.ActivityGraceSeconds.HasValue)
+                config.ActivityGraceSeconds = dto.ActivityGraceSeconds;
 
             _context.Set<SensorConfig>().Update(config);
             await _context.SaveChangesAsync(cancellationToken);
@@ -227,7 +239,9 @@ namespace Elderlynk.Services
             LowerWarningThreshold = c.LowerWarningThreshold,
             UpperWarningThreshold = c.UpperWarningThreshold,
             UpperAlarmThreshold = c.UpperAlarmThreshold,
-            Active = c.Active
+            Active = c.Active,
+            PersistenceSeconds = c.PersistenceSeconds,
+            ActivityGraceSeconds = c.ActivityGraceSeconds
         };
 
         private static string? BuildName(string? first, string? last)

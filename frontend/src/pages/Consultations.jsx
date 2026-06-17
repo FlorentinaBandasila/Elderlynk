@@ -5,7 +5,6 @@ import Button from '@/components/ui/Button'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import RepeatSection, { inputClass } from '@/components/ui/RepeatSection'
-import { consultations as initialConsults, patients } from '@/data/mock'
 import { consultationAPI, patientAPI } from '@/services/api'
 import { mapConsultationFromAPI, mapConsultationToAPI } from '@/services/mappers'
 

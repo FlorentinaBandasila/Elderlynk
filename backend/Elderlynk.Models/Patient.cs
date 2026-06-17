@@ -43,6 +43,9 @@ namespace Elderlynk.Models
         [Column("Loc_Munca")]
         public string? WorkPlace { get; set; }
 
+        [Column("ID_Ingrijitor")]
+        public int? CaregiverId { get; set; }
+
         [Column("Parola_Hash")]
         public string? PasswordHash { get; set; }
 

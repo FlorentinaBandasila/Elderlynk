@@ -5,17 +5,14 @@ import { Card } from '@/components/ui/Card'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import RepeatSection, { inputClass } from '@/components/ui/RepeatSection'
-import { alarms } from '@/data/mock'
 import { patientAPI } from '@/services/api'
 import { mapPatientFromAPI } from '@/services/mappers'
 import { useAuth, ROLES } from '@/context/AuthContext'
 
-const activeAlarms = alarms.filter(a => a.status === 'Active')
-
 const EMPTY_DEMOGRAPHICS = {
   lastName: '', firstName: '', cnp: '',
   street: '', city: '', county: '', postalCode: '',
-  phone: '', email: '', profession: '', workplace: '',
+  phone: '', email: '', profession: '', workplace: '', caregiverId: '',
 }
 const EMPTY_ALLERGY = { denumire: '' }
 const EMPTY_HISTORY = { diagnostic: '', tratament: '', dataDiagnostic: '', observatii: '' }
@@ -27,6 +24,7 @@ export default function Patients() {
   const { hasRole } = useAuth()
   const canAddPatient = hasRole(ROLES.ADMIN) || hasRole(ROLES.MEDIC)
   const [patients, setPatients]   = useState([])
+  const [caregivers, setCaregivers] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch]       = useState('')
   const [showDialog, setShowDialog] = useState(false)
@@ -63,6 +61,16 @@ export default function Patients() {
     }
 
     fetchPatients()
+
+    // Caregivers (Utilizatori cu ID_Rol = 5) for the assignment dropdown.
+    if (canAddPatient) {
+      patientAPI.getCaregivers()
+        .then(setCaregivers)
+        .catch(error => {
+          console.error('Error fetching caregivers:', error)
+          setCaregivers([])
+        })
+    }
   }, [])
 
   const filtered = patients.filter(p => {
@@ -136,6 +144,7 @@ export default function Patients() {
         email: t(formData.email),
         profession: t(formData.profession),
         workPlace: t(formData.workplace),
+        caregiverId: formData.caregiverId ? Number(formData.caregiverId) : null,
         allergies: allergies
           .filter(a => t(a.denumire))
           .map(a => ({ denumire: t(a.denumire) })),
@@ -230,7 +239,6 @@ export default function Patients() {
             </thead>
             <tbody>
               {filtered.map(p => {
-                const patientAlarms = activeAlarms.filter(a => a.patientId === p.id)
                 return (
                   <tr
                     key={p.id}
@@ -304,6 +312,21 @@ export default function Patients() {
               <Field label="Email" name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="Ex: pacient@mail.com" />
               <Field label="Profesie" name="profession" value={formData.profession} onChange={handleInputChange} placeholder="Ex: Inginer" />
               <Field label="Loc de muncă" name="workplace" value={formData.workplace} onChange={handleInputChange} placeholder="Ex: SC Exemplu SRL" />
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Îngrijitor</label>
+                <select
+                  name="caregiverId"
+                  value={formData.caregiverId}
+                  onChange={handleInputChange}
+                  className={inputClass}
+                >
+                  <option value="">— Fără îngrijitor —</option>
+                  {caregivers.map(c => {
+                    const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email
+                    return <option key={c.userId} value={c.userId}>{name}</option>
+                  })}
+                </select>
+              </div>
               <div className="col-span-2 pt-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">Adresă</div>
               <Field label="Stradă" name="street" value={formData.street} onChange={handleInputChange} placeholder="Ex: Str. Florilor nr. 10" />
               <Field label="Oraș" name="city" value={formData.city} onChange={handleInputChange} placeholder="Ex: Cluj-Napoca" />

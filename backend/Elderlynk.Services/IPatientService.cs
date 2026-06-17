@@ -11,6 +11,9 @@ namespace Elderlynk.Services
 
         Task<PatientResponseDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+        /// <summary>Lists accounts assignable as a patient's caregiver (Utilizatori with ID_Rol = 5).</summary>
+        Task<IEnumerable<UserResponseDto>> GetCaregiversAsync(CancellationToken cancellationToken = default);
+
         /// <summary>
         /// Creates a patient. When <paramref name="linkMedicId"/> is provided, an initial
         /// Consultatii row is created so the medic "owns" the patient. Any allergies,
@@ -37,5 +40,11 @@ namespace Elderlynk.Services
         Task<bool> DeleteMedicationAsync(int medicationId, int actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
 
         Task<IEnumerable<AuditLogResponseDto>> GetActivityAsync(int patientId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Returns sensor readings for a patient (joined sensor → device → patient),
+        /// enriched with sensor metadata/thresholds for graphing. Optionally filtered by date.
+        /// </summary>
+        Task<IEnumerable<PatientMeasurementDto>> GetMeasurementsAsync(int patientId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default);
     }
 }

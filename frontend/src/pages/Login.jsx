@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth, SESSION_EXPIRED_KEY } from '@/context/AuthContext'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -8,11 +8,21 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [expired, setExpired] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Show "session expired" when redirected here by inactivity / token expiry.
+  useEffect(() => {
+    if (sessionStorage.getItem(SESSION_EXPIRED_KEY)) {
+      setExpired(true)
+      sessionStorage.removeItem(SESSION_EXPIRED_KEY)
+    }
+  }, [])
 
   const handleLogin = async (e) => {
     e.preventDefault()
     setError('')
+    setExpired(false)
     setLoading(true)
     try {
       await login(email, password)
@@ -45,6 +55,12 @@ export default function Login() {
           <p className="text-xs text-slate-500 mb-5">
             Introduceți datele de acces. Rolul este determinat automat.
           </p>
+
+          {expired && !error && (
+            <div className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Sesiunea a expirat. Autentificați-vă din nou.
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">

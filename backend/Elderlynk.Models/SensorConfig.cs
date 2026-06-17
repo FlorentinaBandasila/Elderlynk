@@ -48,5 +48,15 @@ namespace Elderlynk.Models
 
         [Column("Activ")]
         public bool? Active { get; set; }
+
+        // ===== Annex 3 alarm-rule conditions =====
+        // How long (seconds) a reading must stay out of range before an alarm fires.
+        [Column("Durata_Persistenta_Sec")]
+        public int? PersistenceSeconds { get; set; }
+
+        // Grace period (seconds) after the start of physical activity during which
+        // out-of-range readings are tolerated (suppressed).
+        [Column("Intarziere_Post_Activitate_Sec")]
+        public int? ActivityGraceSeconds { get; set; }
     }
 }

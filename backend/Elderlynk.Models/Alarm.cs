@@ -16,7 +16,7 @@ namespace Elderlynk.Models
         [Column("ID_Pacient")]
         public int? PatientId { get; set; }
 
-        [Column("Tip_Alarma")]
+        [Column("Severitate_Alarma")]
         [MaxLength(20)]
         public string? AlarmType { get; set; }
 
