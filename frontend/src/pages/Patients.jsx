@@ -14,6 +14,26 @@ const EMPTY_DEMOGRAPHICS = {
   street: '', city: '', county: '', postalCode: '',
   phone: '', email: '', profession: '', workplace: '', caregiverId: '',
 }
+// Validează un CNP românesc: 13 cifre, dată de naștere plauzibilă și cifra de control.
+const CNP_WEIGHTS = [2, 7, 9, 1, 4, 6, 3, 5, 8, 2, 7, 9]
+function isValidCNP(cnp) {
+  if (!/^\d{13}$/.test(cnp) || cnp[0] === '0') return false
+
+  const year = parseInt(cnp.substring(1, 3), 10)
+  const month = parseInt(cnp.substring(3, 5), 10)
+  const day = parseInt(cnp.substring(5, 7), 10)
+  const century = { 1: 1900, 2: 1900, 3: 1800, 4: 1800, 5: 2000, 6: 2000, 7: 1900, 8: 1900, 9: 1900 }[cnp[0]]
+  const fullYear = century + year
+  const date = new Date(fullYear, month - 1, day)
+  if (date.getFullYear() !== fullYear || date.getMonth() !== month - 1 || date.getDate() !== day) return false
+
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += parseInt(cnp[i], 10) * CNP_WEIGHTS[i]
+  let control = sum % 11
+  if (control === 10) control = 1
+  return control === parseInt(cnp[12], 10)
+}
+
 const EMPTY_ALLERGY = { denumire: '' }
 const EMPTY_HISTORY = { diagnostic: '', tratament: '', dataDiagnostic: '', observatii: '' }
 const EMPTY_RECOMMENDATION = { tipRecomandare: '', descriere: '' }
@@ -110,8 +130,8 @@ export default function Patients() {
       alert('Vă rugăm completați câmpurile obligatorii: Nume, Prenume, CNP')
       return false
     }
-    if (formData.cnp.trim().length !== 13) {
-      alert('CNP-ul trebuie să conțină 13 cifre.')
+    if (!isValidCNP(formData.cnp.trim())) {
+      alert('CNP invalid. Verificați cele 13 cifre și cifra de control.')
       return false
     }
     return true

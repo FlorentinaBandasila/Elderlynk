@@ -135,6 +135,9 @@ namespace Elderlynk.Web.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
+                if (!CNPHelper.IsValidCNP(dto.CNP))
+                    return BadRequest(new { message = "CNP invalid. Verificați cele 13 cifre și cifra de control." });
+
                 var currentUserId = User.GetUserId();
                 // A medic always links the new patient to themselves – id comes from the token, never the body.
                 int? linkMedicId = User.GetRole() == RoleMedic ? currentUserId : null;

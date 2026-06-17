@@ -86,6 +86,62 @@ const parseReferralXml = (content) => {
   }
 }
 
+// Format an HL7 timestamp (YYYYMMDDHHMMSS) into a readable ro-RO date-time.
+const formatHL7Ts = (ts) => {
+  if (!ts) return ''
+  const m = String(ts).match(/^(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?(\d{2})?/)
+  if (!m) return ts
+  const [, y, mo, d, h = '00', mi = '00'] = m
+  const dt = new Date(`${y}-${mo}-${d}T${h}:${mi}:00`)
+  return isNaN(dt) ? ts : dt.toLocaleString('ro-RO')
+}
+
+// Parse the Elderlynk XML-style HL7 envelope into structured sections for display.
+// Returns null when the content isn't recognizable XML HL7 (caller falls back to raw).
+const parseHL7Display = (content) => {
+  if (!content || !content.includes('<HL7Message')) return null
+  try {
+    const doc = new DOMParser().parseFromString(content, 'application/xml')
+    if (doc.querySelector('parsererror')) return null
+    const root = doc.querySelector('HL7Message')
+    const msh = doc.querySelector('MSH')
+    const pid = doc.querySelector('PID')
+    const rf1 = doc.querySelector('RF1')
+    const obx = doc.querySelector('OBX')
+
+    const name = pid?.getAttribute('name') || ''
+    const [lastName, firstName] = name.split('^')
+
+    return {
+      type: root?.getAttribute('type') || '',
+      header: {
+        from: msh?.getAttribute('sendingApp') || '',
+        to: msh?.getAttribute('receivingApp') || '',
+        messageType: msh?.getAttribute('messageType') || '',
+        controlId: msh?.getAttribute('controlId') || '',
+        timestamp: formatHL7Ts(msh?.getAttribute('timestamp')),
+        inResponseTo: msh?.getAttribute('inResponseTo') || '',
+      },
+      patient: pid ? {
+        id: pid.getAttribute('id') || '',
+        name: firstName ? `${firstName} ${lastName}` : (lastName || name),
+        cnp: pid.getAttribute('cnp') || '',
+      } : null,
+      referral: rf1 ? {
+        status: rf1.getAttribute('status') || '',
+        specialty: rf1.getAttribute('specialty') || '',
+        reason: rf1.getAttribute('reason') || '',
+      } : null,
+      body: obx ? {
+        id: obx.getAttribute('id') || '',
+        text: obx.textContent?.trim() || '',
+      } : null,
+    }
+  } catch {
+    return null
+  }
+}
+
 const buildHL7v2 = ({ patient, consultations, sensorGroups, message }) => {
   const E = hl7Escape
   const ts = hl7Timestamp()
@@ -164,6 +220,7 @@ export default function PatientDetail() {
   const [referralForm, setReferralForm] = useState({ specialty: 'Cardiologie', reason: '', clinicalInfo: '' })
   const [savingReferral, setSavingReferral] = useState(false)
   const [viewMessage, setViewMessage] = useState(null)
+  const [showRawHL7, setShowRawHL7] = useState(false)
   const [busyReplyId, setBusyReplyId] = useState(null)
   const [editTarget, setEditTarget] = useState(null) // { type, id, form, title }
   const [savingEdit, setSavingEdit] = useState(false)
@@ -1025,23 +1082,118 @@ export default function PatientDetail() {
       </Dialog>
 
       {/* HL7 message viewer */}
-      <Dialog open={!!viewMessage} onClose={() => setViewMessage(null)} title="Mesaj HL7" maxWidth="max-w-2xl">
+      <Dialog open={!!viewMessage} onClose={() => { setViewMessage(null); setShowRawHL7(false) }} title="Mesaj HL7" maxWidth="max-w-2xl">
         <DialogBody>
-          <div className="text-xs text-slate-500 mb-2">
-            {(viewMessage?.direction || '').toUpperCase() === 'OUT' ? 'Trimitere (OUT)' : 'Scrisoare medicală (IN)'} ·{' '}
-            {viewMessage?.transferDate ? new Date(viewMessage.transferDate).toLocaleString('ro-RO') : ''}
-          </div>
-          <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap text-slate-700">
+          {(() => {
+            const isOut = (viewMessage?.direction || '').toUpperCase() === 'OUT'
+            const parsed = parseHL7Display(viewMessage?.content)
+            return (
+              <>
+                {/* Direction + transfer date banner */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl ${isOut ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                      {isOut ? <ArrowUpRight size={18} /> : <Inbox size={18} />}
+                    </span>
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800">
+                        {isOut ? 'Trimitere către specialist' : 'Scrisoare medicală primită'}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {viewMessage?.transferDate ? new Date(viewMessage.transferDate).toLocaleString('ro-RO') : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <Badge variant={isOut ? 'blue' : 'green'}>{isOut ? 'OUT' : 'IN'}</Badge>
+                </div>
+
+                {parsed ? (
+                  showRawHL7 ? (
+                    <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap text-slate-700">
 {viewMessage?.content || ''}
-          </pre>
+                    </pre>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Routing / header */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                          <Send size={13} /> Antet mesaj
+                        </div>
+                        <div className="flex items-center justify-center gap-3 text-sm mb-3">
+                          <span className="px-3 py-1 rounded-lg bg-white border border-slate-200 font-medium text-slate-700">{parsed.header.from || '—'}</span>
+                          <ArrowUpRight size={16} className="text-slate-400 rotate-45" />
+                          <span className="px-3 py-1 rounded-lg bg-white border border-slate-200 font-medium text-slate-700">{parsed.header.to || '—'}</span>
+                        </div>
+                        <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                          {parsed.header.messageType && (<><dt className="text-slate-400">Tip</dt><dd className="text-slate-700 text-right font-mono">{parsed.header.messageType}</dd></>)}
+                          {parsed.header.timestamp && (<><dt className="text-slate-400">Dată/oră</dt><dd className="text-slate-700 text-right">{parsed.header.timestamp}</dd></>)}
+                          {parsed.header.controlId && (<><dt className="text-slate-400">ID control</dt><dd className="text-slate-700 text-right font-mono">{parsed.header.controlId}</dd></>)}
+                          {parsed.header.inResponseTo && (<><dt className="text-slate-400">Răspuns la</dt><dd className="text-slate-700 text-right font-mono">#{parsed.header.inResponseTo}</dd></>)}
+                        </dl>
+                      </div>
+
+                      {/* Patient */}
+                      {parsed.patient && (
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                            <User size={13} /> Pacient
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Avatar name={parsed.patient.name} />
+                            <div>
+                              <div className="text-sm font-semibold text-slate-800">{parsed.patient.name || '—'}</div>
+                              <div className="text-xs text-slate-400 font-mono">CNP {parsed.patient.cnp || '—'}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Referral info */}
+                      {parsed.referral && (parsed.referral.specialty || parsed.referral.reason || parsed.referral.status) && (
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">
+                            <Stethoscope size={13} /> Trimitere
+                          </div>
+                          <dl className="grid grid-cols-1 gap-y-1.5 text-sm">
+                            {parsed.referral.specialty && (<div className="flex justify-between gap-4"><dt className="text-slate-400">Specialitate</dt><dd className="text-slate-700 text-right">{parsed.referral.specialty}</dd></div>)}
+                            {parsed.referral.reason && (<div className="flex justify-between gap-4"><dt className="text-slate-400">Motiv</dt><dd className="text-slate-700 text-right">{parsed.referral.reason}</dd></div>)}
+                            {parsed.referral.status && (<div className="flex justify-between gap-4"><dt className="text-slate-400">Status</dt><dd className="text-slate-700 text-right">{parsed.referral.status}</dd></div>)}
+                          </dl>
+                        </div>
+                      )}
+
+                      {/* Clinical body */}
+                      {parsed.body?.text && (
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                            <FileText size={13} /> {parsed.body.id === 'MedicalLetter' ? 'Scrisoare medicală' : 'Informații clinice'}
+                          </div>
+                          <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{parsed.body.text}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : (
+                  <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap text-slate-700">
+{viewMessage?.content || ''}
+                  </pre>
+                )}
+              </>
+            )
+          })()}
         </DialogBody>
         <DialogFooter>
+          {parseHL7Display(viewMessage?.content) && (
+            <Button variant="ghost" onClick={() => setShowRawHL7(v => !v)}>
+              <FileText size={14} /> {showRawHL7 ? 'Vizualizare formatată' : 'Vezi sursa HL7'}
+            </Button>
+          )}
           {(viewMessage?.direction || '').toUpperCase() === 'OUT' && (
             <Button variant="ghost" onClick={() => handleExportHL7(viewMessage)}>
               <Download size={14} /> Export HL7
             </Button>
           )}
-          <Button variant="ghost" onClick={() => setViewMessage(null)}>Închide</Button>
+          <Button variant="ghost" onClick={() => { setViewMessage(null); setShowRawHL7(false) }}>Închide</Button>
         </DialogFooter>
       </Dialog>
 

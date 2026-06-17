@@ -2,6 +2,43 @@ namespace Elderlynk.Services
 {
     public static class CNPHelper
     {
+        // Control-digit weights used by the official CNP checksum algorithm.
+        private static readonly int[] ControlWeights = { 2, 7, 9, 1, 4, 6, 3, 5, 8, 2, 7, 9 };
+
+        /// <summary>
+        /// Validates a Romanian CNP (Cod Numeric Personal): 13 digits, a plausible
+        /// birth date encoded in positions 1-6, and a correct control digit.
+        /// </summary>
+        public static bool IsValidCNP(string? cnp)
+        {
+            if (string.IsNullOrWhiteSpace(cnp) || cnp.Length != 13)
+                return false;
+
+            // Must be all digits, and the first digit (sex/century) cannot be 0.
+            foreach (var c in cnp)
+            {
+                if (c < '0' || c > '9')
+                    return false;
+            }
+            if (cnp[0] == '0')
+                return false;
+
+            // The encoded birth date must be valid.
+            if (ExtractBirthDateFromCNP(cnp) == null)
+                return false;
+
+            // Control digit: sum(digit_i * weight_i) % 11; 10 maps to 1.
+            int sum = 0;
+            for (int i = 0; i < 12; i++)
+                sum += (cnp[i] - '0') * ControlWeights[i];
+
+            int control = sum % 11;
+            if (control == 10)
+                control = 1;
+
+            return control == (cnp[12] - '0');
+        }
+
         /// <summary>
         /// Extract birth date from Romanian CNP (Cod Numeric Personal)
         /// CNP format: SSYYMMDDSSSSSC
