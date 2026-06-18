@@ -19,6 +19,9 @@ export default function LiveAlarms() {
   const [severityFilter, setSev]    = useState('Toate')
   const [statusFilter,   setStatus] = useState('Toate')
   const [live, setLive]             = useState(false)
+  const [page, setPage]             = useState(1)
+
+  const PAGE_SIZE = 20
 
   // Resolution dialog
   const [resolveTarget, setResolveTarget] = useState(null)
@@ -64,13 +67,22 @@ export default function LiveAlarms() {
   const severityDisplayMap = { 'Critical': 'Critic', 'High': 'Înalt', 'Medium': 'Mediu', 'Low': 'Mic' }
   const statusDisplayMap = { 'Active': 'Activă', 'Resolved': 'Rezolvată' }
 
-  const filtered = alarms.filter(a => {
-    const mappedSev = severityMap[severityFilter] || severityFilter
-    const mappedStatus = statusMap[statusFilter] || statusFilter
-    const matchSev    = mappedSev === 'All' || a.severity === mappedSev || (mappedSev === 'High' && a.severity === 'Critical')
-    const matchStatus = mappedStatus === 'All' || a.status === mappedStatus
-    return matchSev && matchStatus
-  })
+  const filtered = alarms
+    .filter(a => {
+      const mappedSev = severityMap[severityFilter] || severityFilter
+      const mappedStatus = statusMap[statusFilter] || statusFilter
+      const matchSev    = mappedSev === 'All' || a.severity === mappedSev || (mappedSev === 'High' && a.severity === 'Critical')
+      const matchStatus = mappedStatus === 'All' || a.status === mappedStatus
+      return matchSev && matchStatus
+    })
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  // Reset to first page whenever the filters change the result set.
+  useEffect(() => { setPage(1) }, [severityFilter, statusFilter])
 
   const openResolve = (alarm) => { setResolveTarget(alarm); setNotes('') }
   const confirmResolve = async () => {
@@ -180,7 +192,7 @@ export default function LiveAlarms() {
                   Nu există alarme care să se potrivească cu filtrele actuale.
                 </td></tr>
               )}
-              {filtered.map(a => {
+              {paginated.map(a => {
                 const isCritActive = a.severity === 'Critical' && a.status === 'Active'
                 return (
                   <tr key={a.id} className="border-b border-slate-50 hover:bg-slate-50"
@@ -213,6 +225,22 @@ export default function LiveAlarms() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">
+            <span className="text-xs text-slate-400">
+              Afișare {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" disabled={currentPage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+                Anterior
+              </Button>
+              <span className="text-xs font-medium text-slate-500">Pagina {currentPage} / {totalPages}</span>
+              <Button size="sm" variant="ghost" disabled={currentPage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+                Următor
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Resolution dialog */}

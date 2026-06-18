@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, SESSION_EXPIRED_KEY } from '@/context/AuthContext'
+import logo from '@/assets/logo.png'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -38,23 +39,17 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#eef2f7' }}>
-      <div className="w-full max-w-md px-4">
+      <div className="w-full max-w-xl px-4">
         <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
-            style={{ backgroundColor: '#0f4c81' }}
-          >
-            <span className="text-white font-bold text-2xl">E</span>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800">Elderlynk</h1>
-          <p className="text-slate-500 text-sm mt-1">Platformă de Teleconsultare</p>
+          <img
+            src={logo}
+            alt="Elderlynk"
+            className="mx-auto mb-3 w-[512px] max-w-full h-auto"
+          />
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <h2 className="font-semibold text-slate-800 mb-1">Autentificare</h2>
-          <p className="text-xs text-slate-500 mb-5">
-            Introduceți datele de acces. Rolul este determinat automat.
-          </p>
+          <h2 className="text-2xl font-bold text-slate-800 mb-5">Autentificare</h2>
 
           {expired && !error && (
             <div className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">

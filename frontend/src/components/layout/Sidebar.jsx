@@ -1,11 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Stethoscope, Radio,
-  Bell, BellRing, Settings, ChevronLeft, ChevronRight, Activity,
+  Bell, BellRing, Settings,
   UserPlus, LogOut, HelpCircle, BarChart3, Cpu,
 } from 'lucide-react'
 import { useAuth, ROLES, ROLE_LABELS } from '@/context/AuthContext'
 import { useActiveAlarmCount } from '@/hooks/useAlarmBadge'
+import icon from '@/assets/icon.png'
 
 // `roles` lists the role ids allowed to see an item. Omit to allow everyone.
 const navGroups = [
@@ -73,35 +74,14 @@ export default function Sidebar({ collapsed, onToggle }) {
       className="fixed left-0 top-0 h-screen flex flex-col z-30 select-none overflow-hidden transition-all duration-300 bg-white border-r border-slate-200"
       style={{ width: collapsed ? '64px' : '240px' }}
     >
-      {/* Logo + toggle */}
+      {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-4 border-b border-slate-100 min-h-[68px]">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: '#00b4d8' }}
-        >
-          <Activity size={16} color="#fff" />
-        </div>
+        <img src={icon} alt="Elderlynk" className="w-8 h-8 object-contain flex-shrink-0" />
         {!collapsed && (
           <div className="flex-1 min-w-0">
             <div className="font-bold text-slate-800 text-sm leading-tight">Elderlynk</div>
             <div className="text-slate-400 text-xs uppercase tracking-wider">Platformă de Teleconsultare</div>
           </div>
-        )}
-        {!collapsed && (
-          <button
-            onClick={onToggle}
-            className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors flex-shrink-0"
-          >
-            <ChevronLeft size={15} />
-          </button>
-        )}
-        {collapsed && (
-          <button
-            onClick={onToggle}
-            className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded hover:bg-slate-100 transition-colors mx-auto"
-          >
-            <ChevronRight size={15} />
-          </button>
         )}
       </div>
 

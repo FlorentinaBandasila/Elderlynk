@@ -72,6 +72,9 @@ export default function Dashboard() {
 
   const resolve  = id => setResolvedIds(p => [...p, id])
   const pending  = allActive.filter(a => !resolvedIds.includes(a.id))
+  const recentAlarms = [...apiAlarms]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 9)
   const critLive = criticalAlarm && !resolvedIds.includes(criticalAlarm.id)
 
   const stats = [
@@ -287,7 +290,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {apiAlarms.map(a => (
+                  {recentAlarms.map(a => (
                     <tr key={a.id} className="border-b border-slate-50 hover:bg-slate-50">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
