@@ -81,6 +81,18 @@ namespace Elderlynk.Services
             var patientNames = await _context.Set<Patient>().AsNoTracking()
                 .ToDictionaryAsync(p => p.PatientId, p => BuildName(p.FirstName, p.LastName), cancellationToken);
 
+            // Latest reading per sensor from Masuratori_Senzori, keyed by sensor id.
+            var sensorIds = sensors.Select(s => s.SensorId).ToList();
+            var latestReadings = (await _context.Set<SensorMeasurement>().AsNoTracking()
+                .Where(m => m.SensorId != null && sensorIds.Contains(m.SensorId.Value))
+                .GroupBy(m => m.SensorId!.Value)
+                .Select(g => g
+                    .OrderByDescending(m => m.MeasurementDateTime)
+                    .Select(m => new { m.SensorId, m.Value, m.MeasurementDateTime })
+                    .First())
+                .ToListAsync(cancellationToken))
+                .ToDictionary(r => r.SensorId!.Value, r => (r.Value, r.MeasurementDateTime));
+
             var result = new List<SensorConfigResponseDto>();
             foreach (var sensor in sensors)
             {
@@ -92,7 +104,10 @@ namespace Elderlynk.Services
                     continue;
 
                 var patientName = patientId != null && patientNames.TryGetValue(patientId.Value, out var n) ? n : null;
-                result.Add(Map(sensor, patientId, patientName));
+                var (lastValue, lastDate) = latestReadings.TryGetValue(sensor.SensorId, out var reading)
+                    ? reading
+                    : (null, null);
+                result.Add(Map(sensor, patientId, patientName, lastValue, lastDate));
             }
 
             return result;
@@ -223,7 +238,12 @@ namespace Elderlynk.Services
             await _context.SaveChangesAsync(cancellationToken);
         }
 
-        private static SensorConfigResponseDto Map(SensorConfig c, int? patientId, string? patientName) => new()
+        private static SensorConfigResponseDto Map(
+            SensorConfig c,
+            int? patientId,
+            string? patientName,
+            decimal? lastValue = null,
+            DateTimeOffset? lastReadingDateTime = null) => new()
         {
             SensorId = c.SensorId,
             DeviceId = c.DeviceId,
@@ -241,7 +261,9 @@ namespace Elderlynk.Services
             UpperAlarmThreshold = c.UpperAlarmThreshold,
             Active = c.Active,
             PersistenceSeconds = c.PersistenceSeconds,
-            ActivityGraceSeconds = c.ActivityGraceSeconds
+            ActivityGraceSeconds = c.ActivityGraceSeconds,
+            LastValue = lastValue,
+            LastReadingDateTime = lastReadingDateTime
         };
 
         private static string? BuildName(string? first, string? last)

@@ -54,7 +54,7 @@ export default function SensorConfig() {
     fetchData()
   }, [])
 
-  const patientNames = ['All', ...Array.from(new Set(sensors.map(s => s.patientName || 'Unknown')))]
+  const patientNames = ['All', ...Array.from(new Set(sensors.map(s => s.patientName || 'Necunoscut')))]
 
   const counts = {
     total:    sensors.length,
@@ -211,7 +211,7 @@ export default function SensorConfig() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-bold text-slate-800 text-base">{s.name}</div>
-                  {s.patientName && s.patientName !== 'Unknown' && (
+                  {s.patientName && s.patientName !== 'Necunoscut' && (
                     <div className="text-xs text-slate-500 mt-0.5 truncate">{s.patientName}</div>
                   )}
                 </div>
@@ -260,7 +260,7 @@ export default function SensorConfig() {
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200 hover:border-slate-300 hover:text-slate-800 cursor-pointer transition-colors"
                 >
                   <Settings2 size={14} style={{ color: '#0f4c81' }} />
-                  Configure
+                  Configurează
                 </button>
               </div>
             </CardBody>
@@ -272,7 +272,7 @@ export default function SensorConfig() {
       <Dialog
         open={!!editSensor}
         onClose={() => setEditSensor(null)}
-        title={`Configure — ${editSensor?.type}`}
+        title={`Configurează — ${editSensor?.type}`}
       >
         <DialogBody className="space-y-4">
           <div
@@ -282,20 +282,20 @@ export default function SensorConfig() {
             {editSensor?.patientName} · {editSensor?.model}
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Stare</label>
             <select
               className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
               value={form.status}
               onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
             >
-              <option>Online</option>
-              <option>Offline</option>
-              <option>Disabled</option>
+              <option value="Online">Online</option>
+              <option value="Offline">Offline</option>
+              <option value="Disabled">Dezactivat</option>
             </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-              Sample Rate (seconds)
+              Rată eșantionare (secunde)
             </label>
             <input
               type="number"
@@ -362,8 +362,8 @@ export default function SensorConfig() {
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setEditSensor(null)}>Cancel</Button>
-          <Button onClick={saveEdit}>Save Changes</Button>
+          <Button variant="ghost" onClick={() => setEditSensor(null)}>Anulează</Button>
+          <Button onClick={saveEdit}>Salvează modificările</Button>
         </DialogFooter>
       </Dialog>
     </div>

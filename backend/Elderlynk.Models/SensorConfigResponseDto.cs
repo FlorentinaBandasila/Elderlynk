@@ -19,5 +19,9 @@ namespace Elderlynk.Models
         public bool? Active { get; set; }
         public int? PersistenceSeconds { get; set; }
         public int? ActivityGraceSeconds { get; set; }
+
+        // Latest reading from Masuratori_Senzori for this sensor (null if no measurements yet).
+        public decimal? LastValue { get; set; }
+        public DateTimeOffset? LastReadingDateTime { get; set; }
     }
 }
