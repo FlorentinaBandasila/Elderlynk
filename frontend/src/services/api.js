@@ -77,6 +77,8 @@ export const authAPI = {
   resetPassword: ({ userType, userId, newPassword }) =>
     request('/auth/reset-password', { method: 'POST', body: { userType, userId, newPassword } }),
 
+  logout: () => request('/auth/logout', { method: 'POST' }),
+
   me: () => request('/auth/me'),
 }
 
@@ -92,13 +94,15 @@ export const patientAPI = {
   getHistory: (id) => request(`/Patients/${id}/history`),
   getMedications: (id) => request(`/Patients/${id}/medications`),
   getActivity: (id) => request(`/Patients/${id}/activity`),
-  getMeasurements: (id, { from, to } = {}) => {
+  getMeasurements: (id, { from, to, limit } = {}) => {
     const qs = new URLSearchParams()
     if (from) qs.set('from', from)
     if (to) qs.set('to', to)
+    if (limit) qs.set('limit', limit)
     const q = qs.toString()
     return request(`/Patients/${id}/measurements${q ? `?${q}` : ''}`)
   },
+  getManualMeasurements: (id) => request(`/Patients/${id}/manual-measurements`),
   updateSelf: (data) => request('/Patients/me', { method: 'PUT', body: data }),
   updateAllergy: (allergyId, data) => request(`/Patients/allergies/${allergyId}`, { method: 'PUT', body: data }),
   deleteAllergy: (allergyId) => request(`/Patients/allergies/${allergyId}`, { method: 'DELETE' }),

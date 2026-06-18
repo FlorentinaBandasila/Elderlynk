@@ -12,6 +12,7 @@ import Patients from '@/pages/Patients'
 import PatientDetail from '@/pages/PatientDetail'
 import Consultations from '@/pages/Consultations'
 import SensorConfig from '@/pages/SensorConfig'
+import Devices from '@/pages/Devices'
 import LiveAlarms from '@/pages/LiveAlarms'
 import Notifications from '@/pages/Notifications'
 import Reports from '@/pages/Reports'
@@ -75,6 +76,14 @@ export default function App() {
                 element={
                   <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
                     <Register />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/devices"
+                element={
+                  <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                    <Devices />
                   </ProtectedRoute>
                 }
               />

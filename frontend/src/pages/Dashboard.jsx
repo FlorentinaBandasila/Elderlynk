@@ -11,6 +11,8 @@ import { patientAPI, alarmAPI, sensorConfigAPI } from '@/services/api'
 import { mapPatientFromAPI, mapAlarmFromAPI, mapSensorConfigFromAPI } from '@/services/mappers'
 
 const severityVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'gray' }
+const severityLabel   = { Critical: 'Critic', High: 'Înalt', Medium: 'Mediu', Low: 'Mic' }
+const statusLabel     = { Active: 'Activă', Resolved: 'Rezolvată' }
 
 // Derived from live API data (recomputed each render below).
 let allActive = []
@@ -192,7 +194,7 @@ export default function Dashboard() {
                     </div>
                     <div className="text-xl font-bold text-slate-800">{criticalAlarm.patientName}</div>
                     <div className="text-sm text-slate-500 mt-0.5">
-                      Room {criticalAlarm.room} · {criticalAlarm.sensor} — {criticalAlarm.type}
+                      Salon {criticalAlarm.room} · {criticalAlarm.sensor} — {criticalAlarm.type}
                     </div>
                     <div className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
                       <Clock size={12} />
@@ -292,7 +294,7 @@ export default function Dashboard() {
                           <Avatar name={a.patientName} size="sm" />
                           <div>
                             <div className="font-semibold text-slate-700 text-sm">{a.patientName}</div>
-                            <div className="text-xs text-slate-400">Room {a.room}</div>
+                            <div className="text-xs text-slate-400">Salon {a.room}</div>
                           </div>
                         </div>
                       </td>
@@ -301,7 +303,7 @@ export default function Dashboard() {
                         <div className="text-xs text-slate-400 mt-0.5">{a.value}</div>
                       </td>
                       <td className="px-5 py-3.5">
-                        <Badge variant={severityVariant[a.severity]}>{a.severity}</Badge>
+                        <Badge variant={severityVariant[a.severity]}>{severityLabel[a.severity] || a.severity}</Badge>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-slate-500">{fmt(a.timestamp)}</td>
                       <td className="px-5 py-3.5">
@@ -316,7 +318,7 @@ export default function Dashboard() {
                         ) : (
                           <span className="flex items-center gap-1 text-sm text-slate-400">
                             <CheckCircle size={14} style={{ color: '#16a34a' }} />
-                            {a.status}
+                            {statusLabel[a.status] || a.status}
                           </span>
                         )}
                       </td>
@@ -385,7 +387,7 @@ export default function Dashboard() {
                     <Avatar name={a.patientName} size="sm" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-slate-700 truncate">{a.patientName}</div>
-                      <div className="text-xs text-slate-400 truncate">{a.type} · Room {a.room}</div>
+                      <div className="text-xs text-slate-400 truncate">{a.type} · Salon {a.room}</div>
                     </div>
                     <button
                       onClick={() => resolve(a.id)}

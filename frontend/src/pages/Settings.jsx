@@ -23,7 +23,7 @@ export default function Settings() {
 
   const [profile, setProfile] = useState({
     name: 'Dr. Sarah Chen', email: 'sarah.chen@sunrisecare.org',
-    role: 'Attending Physician', facility: 'Sunrise Care Center',
+    role: 'Medic primar', facility: 'Centrul de Îngrijire Sunrise',
   })
 
   const [alerts, setAlerts] = useState({

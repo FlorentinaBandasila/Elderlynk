@@ -14,6 +14,7 @@ const typeIcon = {
 }
 
 const priorityVariant = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'gray' }
+const priorityLabel   = { Critical: 'Critică', High: 'Înaltă', Medium: 'Medie', Low: 'Mică' }
 
 const typeFilters = [
   { key: 'All', label: 'Toate' },
@@ -130,7 +131,7 @@ export default function Notifications() {
                     {!n.read && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#0f4c81' }} />}
                     {n.title}
                   </div>
-                  <Badge variant={priorityVariant[n.priority] || 'gray'}>{n.priority}</Badge>
+                  <Badge variant={priorityVariant[n.priority] || 'gray'}>{priorityLabel[n.priority] || n.priority}</Badge>
                 </div>
                 <div className="text-sm text-slate-500 mt-0.5">{n.message}</div>
                 <div className="text-xs text-slate-400 mt-1">{fmt(n.timestamp)}</div>

@@ -5,8 +5,12 @@ import Button from '@/components/ui/Button'
 import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import RepeatSection, { inputClass } from '@/components/ui/RepeatSection'
+import SearchSelect from '@/components/ui/SearchSelect'
 import { consultationAPI, patientAPI } from '@/services/api'
 import { mapConsultationFromAPI, mapConsultationToAPI } from '@/services/mappers'
+import { ICD9_CODES, getDiagnosticByCode } from '@/data/icd9'
+
+const ICD9_OPTIONS = ICD9_CODES.map(c => ({ value: c.code, label: c.label }))
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -189,7 +193,7 @@ export default function Consultations() {
           patientsRes.forEach(p => {
             const firstName = p.firstName || p.FirstName || ''
             const lastName = p.lastName || p.LastName || ''
-            const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+            const name = [firstName, lastName].filter(Boolean).join(' ') || 'Pacient necunoscut'
             patientNameMap[p.patientId || p.PatientId] = name
           })
         }
@@ -268,14 +272,14 @@ export default function Consultations() {
       if (patient) {
         const firstName = patient.firstName || patient.name?.split(' ')[0] || ''
         const lastName = patient.lastName || patient.name?.split(' ')[1] || ''
-        newConsult.patientName = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+        newConsult.patientName = [firstName, lastName].filter(Boolean).join(' ') || 'Pacient necunoscut'
       }
 
       setConsults(prev => [newConsult, ...prev])
       closeDialog()
     } catch (error) {
       console.error('Error creating consultation:', error)
-      alert(`Error creating consultation: ${error.message}`)
+      alert(`Eroare la crearea consultației: ${error.message}`)
     } finally {
       setSubmitting(false)
     }
@@ -478,7 +482,7 @@ export default function Consultations() {
             </CardBody>
             <div className="p-4 border-t border-slate-200 flex justify-end flex-shrink-0">
               <Button onClick={exportPdf}>
-                <Download size={15} /> Export PDF
+                <Download size={15} /> Exportă PDF
               </Button>
             </div>
           </Card>
@@ -513,7 +517,7 @@ export default function Consultations() {
                   {patients.map(p => {
                     const firstName = p.firstName || p.FirstName || ''
                     const lastName = p.lastName || p.LastName || ''
-                    const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+                    const name = [firstName, lastName].filter(Boolean).join(' ') || 'Pacient necunoscut'
                     const patientId = p.patientId || p.PatientId
                     return <option key={patientId} value={patientId}>{name}</option>
                   })}
@@ -546,12 +550,23 @@ export default function Consultations() {
                   value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Cod Diagnostic</label>
-                <input
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none"
-                  placeholder="Ex. G43.9"
+                <label className="block text-xs font-medium text-slate-600 mb-1">Cod Diagnostic (ICD-9)</label>
+                <SearchSelect
+                  options={ICD9_OPTIONS}
                   value={form.diagnosisCode}
-                  onChange={e => setForm(f => ({ ...f, diagnosisCode: e.target.value }))}
+                  onChange={(code) =>
+                    setForm(f => ({
+                      ...f,
+                      diagnosisCode: code,
+                      // Pre-completează textul diagnosticului dacă e gol sau corespunde codului anterior.
+                      diagnosticText:
+                        !f.diagnosticText || f.diagnosticText === getDiagnosticByCode(f.diagnosisCode)
+                          ? getDiagnosticByCode(code)
+                          : f.diagnosticText,
+                    }))
+                  }
+                  placeholder="Selectați un diagnostic..."
+                  searchPlaceholder="Căutați cod sau diagnostic..."
                 />
               </div>
               <div className="col-span-2">

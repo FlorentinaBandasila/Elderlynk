@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Stethoscope, Radio,
   Bell, BellRing, Settings, ChevronLeft, ChevronRight, Activity,
-  UserPlus, LogOut, HelpCircle, BarChart3,
+  UserPlus, LogOut, HelpCircle, BarChart3, Cpu,
 } from 'lucide-react'
 import { useAuth, ROLES, ROLE_LABELS } from '@/context/AuthContext'
 import { useActiveAlarmCount } from '@/hooks/useAlarmBadge'
@@ -29,6 +29,7 @@ const navGroups = [
     label: 'Administrare',
     items: [
       { to: '/register', icon: UserPlus, label: 'Utilizatori', roles: [ROLES.ADMIN] },
+      { to: '/devices',  icon: Cpu,      label: 'Dispozitive', roles: [ROLES.ADMIN] },
     ],
   },
   {
