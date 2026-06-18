@@ -132,7 +132,6 @@ namespace Elderlynk.Web.Controllers
         // than a JWT, since the remote clinic has no Elderlynk login.
         [Microsoft.AspNetCore.Authorization.AllowAnonymous]
         [HttpPost("receive")]
-        [Consumes("application/fhir+xml", "application/xml", "text/xml")]
         public async Task<IActionResult> Receive(CancellationToken cancellationToken)
         {
             try

@@ -190,16 +190,18 @@ namespace Elderlynk.Services
             var client = _httpClientFactory.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(30);
 
-            // FHIR XML media type so the receiver knows how to parse the body.
-            var content = new StringContent(message.Content ?? string.Empty, Encoding.UTF8, "application/fhir+xml");
-
-            // Shared secret agreed by both clinics; the receiver checks the same value.
-            var apiKey = _config["Interop:ApiKey"];
-            if (!string.IsNullOrEmpty(apiKey))
-                content.Headers.Add("X-Api-Key", apiKey);
-
             try
             {
+                // FHIR is exchanged as JSON between clinics (the receiver expects a
+                // body with "resourceType"); convert our stored XML Bundle to JSON.
+                var json = ConvertToFhirJson(message.Content ?? string.Empty);
+                var content = new StringContent(json, Encoding.UTF8, "application/fhir+json");
+
+                // Shared secret agreed by both clinics; the receiver checks the same value.
+                var apiKey = _config["Interop:ApiKey"];
+                if (!string.IsNullOrEmpty(apiKey))
+                    content.Headers.Add("X-Api-Key", apiKey);
+
                 var response = await client.PostAsync(targetUrl, content, cancellationToken);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 return new SendHL7ResultDto
@@ -215,12 +217,16 @@ namespace Elderlynk.Services
             }
         }
 
-        public async Task<HL7MessageResponseDto> ReceiveExternalAsync(string fhirXml, CancellationToken cancellationToken = default)
+        public async Task<HL7MessageResponseDto> ReceiveExternalAsync(string payload, CancellationToken cancellationToken = default)
         {
-            // Try to attach the incoming message to a local patient via the CNP carried
-            // in the Bundle's Patient.identifier; otherwise store it unlinked.
+            var trimmed = (payload ?? string.Empty).TrimStart();
+            var isJson = trimmed.StartsWith("{") || trimmed.StartsWith("[");
+
+            // Attach the incoming message to a local patient. Prefer the CNP carried in
+            // the payload (Patient.identifier); replies from other systems often omit it,
+            // so fall back to matching the patient name in subject.display.
             int? patientId = null;
-            var cnp = ExtractCnp(fhirXml);
+            var cnp = isJson ? ExtractCnpFromJson(payload!) : ExtractCnp(payload!);
             if (!string.IsNullOrEmpty(cnp))
             {
                 var patient = await _context.Set<Patient>()
@@ -229,11 +235,31 @@ namespace Elderlynk.Services
                 patientId = patient?.PatientId;
             }
 
+            if (patientId == null)
+            {
+                var name = ExtractPatientName(payload!, isJson);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    // Match on either name ordering ("Last First" or "First Last");
+                    // SQL Server's default collation makes this case-insensitive.
+                    var patient = await _context.Set<Patient>()
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(p =>
+                            (p.LastName + " " + p.FirstName) == name ||
+                            (p.FirstName + " " + p.LastName) == name, cancellationToken);
+                    patientId = patient?.PatientId;
+                }
+            }
+
+            // The Continut_XML_HL7 column is a SQL xml type, so JSON received from a
+            // JSON-speaking clinic must be wrapped in a valid XML envelope to persist.
+            var content = isJson ? WrapJsonAsXml(payload!) : payload;
+
             var message = new HL7Message
             {
                 PatientId = patientId,
                 Direction = "IN",
-                Content = fhirXml,
+                Content = content,
                 TransferDate = DateTime.Now
             };
 
@@ -241,6 +267,173 @@ namespace Elderlynk.Services
             await _context.SaveChangesAsync(cancellationToken);
 
             return Map(message);
+        }
+
+        // Wrap a JSON payload in a CDATA XML envelope so it can be stored in the xml column.
+        private static string WrapJsonAsXml(string json)
+        {
+            // CDATA cannot contain the literal "]]>"; split it the standard way if present.
+            var safe = json.Replace("]]>", "]]]]><![CDATA[>");
+            return $"<ExternalFhirMessage contentType=\"application/fhir+json\"><![CDATA[{safe}]]></ExternalFhirMessage>";
+        }
+
+        // Best-effort CNP lookup in an incoming JSON payload (a 13-digit identifier value).
+        private static string? ExtractCnpFromJson(string json)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(json, "\"value\"\\s*:\\s*\"(\\d{13})\"");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+
+        // Best-effort patient display name from an incoming payload: subject.display
+        // for JSON, or Patient/name (family + given) for our XML bundles.
+        private static string? ExtractPatientName(string payload, bool isJson)
+        {
+            try
+            {
+                if (isJson)
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(payload);
+                    if (doc.RootElement.TryGetProperty("subject", out var subj) &&
+                        subj.TryGetProperty("display", out var disp) &&
+                        disp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        return disp.GetString();
+                    }
+                    return null;
+                }
+
+                XNamespace ns = Fhir;
+                var nm = XDocument.Parse(payload).Descendants(ns + "Patient").FirstOrDefault()?.Element(ns + "name");
+                if (nm == null) return null;
+                var family = V(nm, ns, "family");
+                var given = V(nm, ns, "given");
+                return string.Join(" ", new[] { family, given }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // ----- FHIR XML -> FHIR JSON conversion (for sending to clinics that speak JSON) -----
+
+        // Value of a child element's value="" attribute, e.g. <status value="active"/>.
+        private static string? V(XElement? parent, XNamespace ns, string child)
+            => parent?.Element(ns + child)?.Attribute("value")?.Value;
+
+        // Build a JSON object from (key, value) pairs, skipping null values.
+        private static Dictionary<string, object?> Obj(params (string Key, object? Val)[] pairs)
+        {
+            var d = new Dictionary<string, object?>();
+            foreach (var (k, v) in pairs)
+                if (v != null) d[k] = v;
+            return d;
+        }
+
+        private static void AddIfNotNull(Dictionary<string, object?> d, string key, object? val)
+        {
+            if (val != null) d[key] = val;
+        }
+
+        // Convert our stored FHIR XML Bundle into an equivalent FHIR JSON document.
+        private static string ConvertToFhirJson(string fhirXml)
+        {
+            XNamespace ns = Fhir;
+            var doc = XDocument.Parse(fhirXml);
+            var bundleEl = doc.Root!;
+
+            var bundle = new Dictionary<string, object?> { ["resourceType"] = "Bundle" };
+            var bundleIdent = bundleEl.Element(ns + "identifier");
+            if (bundleIdent != null)
+                bundle["identifier"] = Obj(("value", V(bundleIdent, ns, "value")));
+            AddIfNotNull(bundle, "type", V(bundleEl, ns, "type"));
+            AddIfNotNull(bundle, "timestamp", V(bundleEl, ns, "timestamp"));
+
+            var entries = new List<object?>();
+            foreach (var entry in bundleEl.Elements(ns + "entry"))
+            {
+                var e = new Dictionary<string, object?>();
+                AddIfNotNull(e, "fullUrl", V(entry, ns, "fullUrl"));
+                var resourceEl = entry.Element(ns + "resource")?.Elements().FirstOrDefault();
+                var resourceJson = BuildResourceJson(resourceEl, ns);
+                if (resourceJson != null) e["resource"] = resourceJson;
+                entries.Add(e);
+            }
+            bundle["entry"] = entries;
+
+            return System.Text.Json.JsonSerializer.Serialize(bundle);
+        }
+
+        // Map a single FHIR resource XML element to its JSON representation.
+        private static Dictionary<string, object?>? BuildResourceJson(XElement? res, XNamespace ns)
+        {
+            if (res == null) return null;
+            var name = res.Name.LocalName;
+            var d = new Dictionary<string, object?> { ["resourceType"] = name };
+
+            switch (name)
+            {
+                case "MessageHeader":
+                    var evt = res.Element(ns + "eventCoding");
+                    if (evt != null)
+                        d["eventCoding"] = Obj(("system", V(evt, ns, "system")), ("code", V(evt, ns, "code")), ("display", V(evt, ns, "display")));
+                    var src = res.Element(ns + "source");
+                    if (src != null)
+                        d["source"] = Obj(("name", V(src, ns, "name")), ("endpoint", V(src, ns, "endpoint")));
+                    var dest = res.Element(ns + "destination");
+                    if (dest != null)
+                        d["destination"] = new List<object?> { Obj(("name", V(dest, ns, "name")), ("endpoint", V(dest, ns, "endpoint"))) };
+                    var resp = res.Element(ns + "response");
+                    if (resp != null)
+                        d["response"] = Obj(("identifier", V(resp, ns, "identifier")), ("code", V(resp, ns, "code")));
+                    var focus = res.Element(ns + "focus");
+                    if (focus != null)
+                        d["focus"] = new List<object?> { Obj(("reference", V(focus, ns, "reference"))) };
+                    break;
+
+                case "Patient":
+                    AddIfNotNull(d, "id", res.Element(ns + "id")?.Attribute("value")?.Value);
+                    var ident = res.Element(ns + "identifier");
+                    if (ident != null)
+                        d["identifier"] = new List<object?> { Obj(("system", V(ident, ns, "system")), ("value", V(ident, ns, "value"))) };
+                    var nm = res.Element(ns + "name");
+                    if (nm != null)
+                    {
+                        var nameObj = new Dictionary<string, object?>();
+                        AddIfNotNull(nameObj, "family", V(nm, ns, "family"));
+                        var given = V(nm, ns, "given");
+                        if (given != null) nameObj["given"] = new List<object?> { given };
+                        d["name"] = new List<object?> { nameObj };
+                    }
+                    AddIfNotNull(d, "gender", V(res, ns, "gender"));
+                    AddIfNotNull(d, "birthDate", V(res, ns, "birthDate"));
+                    break;
+
+                case "ServiceRequest":
+                    AddIfNotNull(d, "status", V(res, ns, "status"));
+                    AddIfNotNull(d, "intent", V(res, ns, "intent"));
+                    AddIfNotNull(d, "priority", V(res, ns, "priority"));
+                    var code = res.Element(ns + "code");
+                    if (code != null) d["code"] = Obj(("text", V(code, ns, "text")));
+                    var subj = res.Element(ns + "subject");
+                    if (subj != null) d["subject"] = Obj(("reference", V(subj, ns, "reference")));
+                    AddIfNotNull(d, "authoredOn", V(res, ns, "authoredOn"));
+                    var reason = res.Element(ns + "reasonCode");
+                    if (reason != null) d["reasonCode"] = new List<object?> { Obj(("text", V(reason, ns, "text"))) };
+                    var note = res.Element(ns + "note");
+                    if (note != null) d["note"] = new List<object?> { Obj(("text", V(note, ns, "text"))) };
+                    break;
+
+                case "Communication":
+                    AddIfNotNull(d, "status", V(res, ns, "status"));
+                    var csubj = res.Element(ns + "subject");
+                    if (csubj != null) d["subject"] = Obj(("reference", V(csubj, ns, "reference")));
+                    AddIfNotNull(d, "sent", V(res, ns, "sent"));
+                    var payload = res.Element(ns + "payload");
+                    if (payload != null) d["payload"] = new List<object?> { Obj(("contentString", V(payload, ns, "contentString"))) };
+                    break;
+            }
+            return d;
         }
 
         // Pull the CNP from a FHIR Bundle's first Patient.identifier value.
