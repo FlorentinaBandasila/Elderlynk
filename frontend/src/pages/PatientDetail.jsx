@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import {
-  Heart, Wind, Thermometer, Activity, Stethoscope, User, ClipboardList, Plus, Pencil, Trash2,
-  Send, FileText, Inbox, ArrowUpRight, Download
+  Heart, Thermometer, Activity, Stethoscope, User, ClipboardList, Plus, Pencil, Trash2,
+  Send, FileText, Inbox, ArrowUpRight, Download, Droplet, Scale
 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
@@ -11,13 +11,22 @@ import Avatar from '@/components/ui/Avatar'
 import { Dialog, DialogBody, DialogFooter } from '@/components/ui/Dialog'
 import { TimeSeriesChart, CHART_COLORS } from '@/components/ui/Chart'
 import { patientAPI, consultationAPI, deviceAPI, medicalRecommendationAPI, hl7MessageAPI } from '@/services/api'
-import { mapPatientFromAPI, mapConsultationFromAPI, mapDeviceFromAPI, groupMeasurementsBySensor } from '@/services/mappers'
+import { mapPatientFromAPI, mapConsultationFromAPI, mapDeviceFromAPI, groupMeasurementsBySensor, mergeSensorGroups, mapManualMeasurementFromAPI } from '@/services/mappers'
 import { useAuth, ROLES } from '@/context/AuthContext'
+import { jsPDF } from 'jspdf'
 
-const consultVariant = { Scheduled: 'blue', 'In Progress': 'cyan', Completed: 'green', Cancelled: 'gray' }
+const consultVariant = { Finalizata: 'green', Scheduled: 'blue', 'In Progress': 'cyan', Completed: 'green', Cancelled: 'gray' }
+
+// External clinics that can receive an HL7/FHIR message. Add more entries here as
+// new partner systems come online; the picker in the HL7 viewer reads this list.
+const EXTERNAL_CLINICS = [
+  { name: 'Cardiologie AEH', url: 'https://smuggler-staining-italicize.ngrok-free.dev/api/fhir_receive.php' },
+]
 
 // Translate audit action codes into readable Romanian activity labels.
 const ACTION_LABELS = {
+  LOGIN: 's-a autentificat',
+  LOGOUT: 's-a deconectat',
   CREATE_PATIENT: 'a creat pacientul',
   REGISTER_PATIENT: 'a înregistrat pacientul',
   UPDATE_PATIENT: 'a modificat datele pacientului',
@@ -97,6 +106,21 @@ const formatFhirTs = (ts) => {
   if (!ts) return ''
   const dt = new Date(ts)
   return isNaN(dt) ? ts : dt.toLocaleString('ro-RO')
+}
+
+// If the content is a JSON payload received from an external clinic (wrapped in an
+// <ExternalFhirMessage> XML envelope so it fits the xml DB column), return the inner
+// JSON pretty-printed; otherwise null.
+const extractExternalJson = (content) => {
+  if (!content || !content.includes('ExternalFhirMessage')) return null
+  try {
+    const doc = new DOMParser().parseFromString(content, 'application/xml')
+    const raw = doc.getElementsByTagName('ExternalFhirMessage')[0]?.textContent?.trim()
+    if (!raw) return null
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return null
+  }
 }
 
 // Parse a stored FHIR R4 message Bundle into structured sections for display.
@@ -217,6 +241,11 @@ export default function PatientDetail() {
   const [medications, setMedications] = useState([])
   const [activity, setActivity] = useState([])
   const [sensorGroups, setSensorGroups] = useState({})
+  const [manualMeasurement, setManualMeasurement] = useState(null)
+  const [timeframe, setTimeframe] = useState('1h')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [loadingChart, setLoadingChart] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showRecDialog, setShowRecDialog] = useState(false)
@@ -231,7 +260,7 @@ export default function PatientDetail() {
   const [savingReferral, setSavingReferral] = useState(false)
   const [viewMessage, setViewMessage] = useState(null)
   const [showRawHL7, setShowRawHL7] = useState(false)
-  const [sendTarget, setSendTarget] = useState(() => localStorage.getItem('hl7ClinicUrl') || '')
+  const [sendTarget, setSendTarget] = useState(EXTERNAL_CLINICS[0]?.url || '')
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState(null)
   const [busyReplyId, setBusyReplyId] = useState(null)
@@ -279,6 +308,39 @@ export default function PatientDetail() {
       const r = await hl7MessageAPI.getByPatient(patientId)
       setHl7Messages(Array.isArray(r) ? r : [])
     } catch { setHl7Messages([]) }
+  }
+
+  // Translate a preset timeframe key into an ISO {from, to} window (to = now).
+  const rangeForPreset = (tf) => {
+    const minutes = { '1m': 1, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '3h': 180, '6h': 360 }[tf]
+    if (!minutes) return {} // 'all' -> no bounds
+    return { from: new Date(Date.now() - minutes * 60 * 1000).toISOString() }
+  }
+
+  // (Re)load the sensor evolution chart for a given window. Defaults to the
+  // currently selected preset; pass an explicit range for the custom picker.
+  // Pass silent=true for background polls so the chart keeps showing the
+  // current data instead of flashing the "Se încarcă..." placeholder.
+  const loadMeasurements = async (range, { silent = false } = {}) => {
+    if (!silent) setLoadingChart(true)
+    try {
+      const measurements = await patientAPI.getMeasurements(patientId, range ?? rangeForPreset(timeframe))
+      setSensorGroups(groupMeasurementsBySensor(measurements || []))
+    } catch { if (!silent) setSensorGroups({}) }
+    finally { if (!silent) setLoadingChart(false) }
+  }
+
+  const handleTimeframeChange = (tf) => {
+    setTimeframe(tf)
+    // Presets reload immediately; the custom range waits for "Aplică".
+    if (tf !== 'custom') loadMeasurements(rangeForPreset(tf))
+  }
+
+  const applyCustomRange = () => {
+    loadMeasurements({
+      from: customFrom ? new Date(customFrom).toISOString() : undefined,
+      to: customTo ? new Date(customTo).toISOString() : undefined,
+    })
   }
 
   const handleCreateReferral = async () => {
@@ -336,7 +398,6 @@ export default function PatientDetail() {
     setSending(true)
     setSendResult(null)
     try {
-      localStorage.setItem('hl7ClinicUrl', url)
       const res = await hl7MessageAPI.send(viewMessage.messageId, { targetUrl: url })
       setSendResult(res?.success
         ? { ok: true, text: `Trimis cu succes (HTTP ${res.statusCode}).` }
@@ -347,6 +408,95 @@ export default function PatientDetail() {
     } finally {
       setSending(false)
     }
+  }
+
+  // Render an HL7 message (IN or OUT) as a downloadable PDF document. jsPDF's
+  // built-in fonts don't carry Romanian glyphs, so diacritics are folded to ASCII.
+  const handleDownloadPdf = (message) => {
+    if (!message) return
+    const fold = (s) => String(s ?? '')
+      .replace(/[ăâ]/g, 'a').replace(/[ĂÂ]/g, 'A')
+      .replace(/î/g, 'i').replace(/Î/g, 'I')
+      .replace(/[șş]/g, 's').replace(/[ȘŞ]/g, 'S')
+      .replace(/[țţ]/g, 't').replace(/[ȚŢ]/g, 'T')
+
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    const margin = 48
+    const pageW = doc.internal.pageSize.getWidth()
+    const pageH = doc.internal.pageSize.getHeight()
+    const maxW = pageW - margin * 2
+    let y = margin
+
+    const write = (text, { size = 10, bold = false, color = [51, 65, 85], gap = 15, indent = 0 } = {}) => {
+      doc.setFont('helvetica', bold ? 'bold' : 'normal')
+      doc.setFontSize(size)
+      doc.setTextColor(color[0], color[1], color[2])
+      for (const w of doc.splitTextToSize(fold(text), maxW - indent)) {
+        if (y > pageH - margin) { doc.addPage(); y = margin }
+        doc.text(w, margin + indent, y)
+        y += gap
+      }
+    }
+    const section = (t) => { y += 8; write(t, { size: 11, bold: true, color: [15, 76, 129], gap: 18 }) }
+    const field = (label, value) => { if (value) write(`${label}: ${value}`) }
+    const divider = () => { doc.setDrawColor(226, 232, 240); doc.line(margin, y - 4, pageW - margin, y - 4); y += 8 }
+
+    const isOut = (message.direction || '').toUpperCase() === 'OUT'
+    const parsed = parseHL7Display(message.content)
+    const externalJson = extractExternalJson(message.content)
+
+    write('Mesaj HL7 / FHIR', { size: 16, bold: true, color: [15, 76, 129], gap: 22 })
+    write(isOut ? 'Trimitere catre specialist (OUT)' : 'Scrisoare medicala primita (IN)', { size: 11, gap: 16, color: [100, 116, 139] })
+    if (message.transferDate) write(new Date(message.transferDate).toLocaleString('ro-RO'), { size: 10, gap: 16, color: [148, 163, 184] })
+    divider()
+
+    if (parsed) {
+      section('Antet mesaj')
+      field('De la', parsed.header.from)
+      field('Catre', parsed.header.to)
+      field('Tip', parsed.header.messageType)
+      field('Data/ora', parsed.header.timestamp)
+      field('ID control', parsed.header.controlId)
+      if (parsed.header.inResponseTo) field('Raspuns la', '#' + parsed.header.inResponseTo)
+      if (parsed.patient) {
+        section('Pacient')
+        field('Nume', parsed.patient.name)
+        field('CNP', parsed.patient.cnp)
+      }
+      if (parsed.referral && (parsed.referral.specialty || parsed.referral.reason || parsed.referral.status)) {
+        section('Trimitere')
+        field('Specialitate', parsed.referral.specialty)
+        field('Motiv', parsed.referral.reason)
+        field('Status', parsed.referral.status)
+      }
+      if (parsed.body?.text) {
+        section(parsed.body.id === 'MedicalLetter' ? 'Scrisoare medicala' : 'Informatii clinice')
+        write(parsed.body.text)
+      }
+    } else if (externalJson) {
+      let obj = null
+      try { obj = JSON.parse(externalJson) } catch { /* keep raw */ }
+      if (obj) {
+        section('Mesaj FHIR de la clinica externa')
+        field('Tip resursa', obj.resourceType)
+        field('Pacient', obj.subject?.display)
+        field('Medic', obj.performer?.[0]?.display)
+        field('Status', obj.status)
+        if (obj.issued) field('Emis', new Date(obj.issued).toLocaleString('ro-RO'))
+        const icd = obj.conclusionCode?.[0]?.coding?.[0]
+        if (icd) field('Diagnostic (ICD-10)', `${icd.code} - ${icd.display}`)
+        if (obj.conclusion) { section('Concluzie'); write(obj.conclusion) }
+      } else {
+        section('Continut')
+        write(externalJson, { size: 9, gap: 12 })
+      }
+    } else {
+      section('Continut brut')
+      write(message.content || '', { size: 8, gap: 11 })
+    }
+
+    const who = (parsed?.patient?.name || patient?.lastName || 'mesaj').replace(/\s+/g, '_')
+    doc.save(`HL7_${who}_${message.messageId ?? ''}.pdf`)
   }
 
   const handleAddActivityRec = async () => {
@@ -511,11 +661,13 @@ export default function PatientDetail() {
               setDevices(devicesResponse.filter(d => d.patientId === patientId).map(mapDeviceFromAPI))
             } catch { setDevices([]) }
           })(),
+          loadMeasurements(rangeForPreset('1h')),
           (async () => {
             try {
-              const measurements = await patientAPI.getMeasurements(patientId)
-              setSensorGroups(groupMeasurementsBySensor(measurements || []))
-            } catch { setSensorGroups({}) }
+              const manual = await patientAPI.getManualMeasurements(patientId)
+              // The endpoint returns rows newest-first; the first row holds the current vitals.
+              setManualMeasurement(Array.isArray(manual) && manual.length ? mapManualMeasurementFromAPI(manual[0]) : null)
+            } catch { setManualMeasurement(null) }
           })(),
         ])
       } catch (err) {
@@ -528,6 +680,24 @@ export default function PatientDetail() {
 
     fetchData()
   }, [id])
+
+  // Pulse readings arrive every ~10s; silently refresh the chart (and the
+  // derived vitals cards) on the same cadence so the page stays live without
+  // a manual reload. Instead of re-fetching the whole window each tick, we
+  // pull only the last few rows and merge them into the existing data,
+  // trimming anything that has aged out of the rolling window.
+  useEffect(() => {
+    if (loading) return
+    const id = setInterval(async () => {
+      try {
+        const latest = await patientAPI.getMeasurements(patientId, { limit: 3 })
+        const range = timeframe === 'custom' ? {} : rangeForPreset(timeframe)
+        const minTs = range.from ? new Date(range.from).getTime() : null
+        setSensorGroups(prev => mergeSensorGroups(prev, latest || [], minTs))
+      } catch { /* keep the last good data on a transient poll failure */ }
+    }, 10000)
+    return () => clearInterval(id)
+  }, [loading, timeframe, customFrom, customTo, patientId])
 
   if (loading) return (
     <div className="p-10 text-center text-slate-500">Se încarcă...</div>
@@ -547,24 +717,46 @@ export default function PatientDetail() {
     patient.physician ||
     'Necunoscut'
 
-  const vitals = patient.vitals ? [
+  // Latest non-null reading of the first sensor group whose type name matches any
+  // of the given keywords (sensor types come from Senzori_Configurare.Tip_Senzor).
+  const latestSensorReading = (keywords) => {
+    const entry = Object.entries(sensorGroups).find(([type]) =>
+      keywords.some(k => type.toLowerCase().includes(k)))
+    if (!entry) return null
+    const latest = (entry[1].data || []).filter(d => d.value != null).sort((a, b) => b.ts - a.ts)[0]
+    return latest ? { value: latest.value, unit: entry[1].unit } : null
+  }
+
+  // Vitals sources:
+  //  - Ritm Cardiac (puls) from Masuratori_Senzori
+  //  - PA, Temperatură, Glicemie, Greutate from the latest Masuratori_Manuale row
+  // Every card is always shown; a missing value falls back to 0 (and never highlights
+  // as a warning, so the placeholder 0 isn't mistaken for an out-of-range reading).
+  const puls = latestSensorReading(['puls', 'ritm', 'cardiac', 'heart', 'bpm', 'hr'])
+  const m = manualMeasurement
+  const vitals = [
     {
-      label: 'Ritm Cardiac',       value: patient.vitals.hr,   unit: 'bpm',  icon: Heart,       color: '#e63946',
-      warn: patient.vitals.hr > 100 || patient.vitals.hr < 55,
+      label: 'Ritm Cardiac', value: puls?.value ?? 0, unit: puls?.unit || 'bpm', icon: Heart, color: '#e63946',
+      warn: puls != null && (puls.value > 100 || puls.value < 55),
     },
     {
-      label: 'SpO₂',             value: patient.vitals.spo2, unit: '%',    icon: Wind,        color: '#00b4d8',
-      warn: patient.vitals.spo2 < 92,
+      label: 'PA Sistolică', value: `${m?.systolic ?? 0}/${m?.diastolic ?? 0}`,
+      unit: 'mmHg', icon: Activity, color: '#7c3aed',
+      warn: m?.systolic != null && (m.systolic > 140 || (m.diastolic != null && m.diastolic > 90)),
     },
     {
-      label: 'PA Sistolică',      value: patient.vitals.bp,   unit: 'mmHg', icon: Activity,    color: '#7c3aed',
+      label: 'Temperatură', value: m?.temperature ?? 0, unit: '°C', icon: Thermometer, color: '#d97706',
+      warn: m?.temperature != null && m.temperature > 38,
+    },
+    {
+      label: 'Glicemie', value: m?.glucose ?? 0, unit: 'mg/dL', icon: Droplet, color: '#0891b2',
+      warn: m?.glucose != null && (m.glucose > 140 || m.glucose < 70),
+    },
+    {
+      label: 'Greutate', value: m?.weight ?? 0, unit: 'kg', icon: Scale, color: '#16a34a',
       warn: false,
     },
-    {
-      label: 'Temperatură',      value: patient.vitals.temp, unit: '°C',   icon: Thermometer, color: '#d97706',
-      warn: patient.vitals.temp > 38,
-    },
-  ] : []
+  ]
 
   return (
     <div className="p-6 space-y-5">
@@ -597,7 +789,7 @@ export default function PatientDetail() {
                   <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-slate-500">
                     <span>ID: {patient.id.replace('p', '').padStart(6, '0')}</span>
                     <span>·</span>
-                    <span>{patient.age} ani, {patient.gender}</span>
+                    <span>{[patient.age != null ? `${patient.age} ani` : null, patient.gender].filter(Boolean).join(', ')}</span>
                     <span>·</span>
                     <span>{patient.room}</span>
                     <span>·</span>
@@ -727,8 +919,64 @@ export default function PatientDetail() {
           {/* Evoluție senzori (grafice) */}
           <Card>
             <CardBody className="py-5">
-              <h3 className="text-base font-bold text-slate-700 mb-4">Evoluție Senzori</h3>
-              {Object.keys(sensorGroups).length === 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <h3 className="text-base font-bold text-slate-700">Evoluție Senzori</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={timeframe}
+                    onChange={e => handleTimeframeChange(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 outline-none cursor-pointer bg-white"
+                  >
+                    <option value="1m">Ultimul minut</option>
+                    <option value="5m">Ultimele 5 minute</option>
+                    <option value="15m">Ultimele 15 minute</option>
+                    <option value="30m">Ultimele 30 minute</option>
+                    <option value="1h">Ultima oră</option>
+                    <option value="3h">Ultimele 3 ore</option>
+                    <option value="6h">Ultimele 6 ore</option>
+                    <option value="all">Tot istoricul</option>
+                    <option value="custom">Interval personalizat</option>
+                  </select>
+                  {timeframe === 'custom' && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1 text-xs text-slate-500">
+                        De la
+                        <input
+                          type="datetime-local"
+                          value={customFrom}
+                          onChange={e => setCustomFrom(e.target.value)}
+                          className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-700 outline-none"
+                        />
+                      </label>
+                      <label className="flex items-center gap-1 text-xs text-slate-500">
+                        Până la
+                        <input
+                          type="datetime-local"
+                          value={customTo}
+                          onChange={e => setCustomTo(e.target.value)}
+                          className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-700 outline-none"
+                        />
+                      </label>
+                      <button
+                        onClick={applyCustomRange}
+                        disabled={loadingChart || (!customFrom && !customTo)}
+                        className="text-xs font-medium px-3 py-1.5 rounded-lg text-white hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+                        style={{ backgroundColor: '#0f4c81' }}
+                      >
+                        Aplică
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {loadingChart ? (
+                <div
+                  className="flex items-center justify-center rounded-lg text-sm text-slate-400"
+                  style={{ height: '120px', backgroundColor: '#f8fafc' }}
+                >
+                  Se încarcă...
+                </div>
+              ) : Object.keys(sensorGroups).length === 0 ? (
                 <div
                   className="flex items-center justify-center rounded-lg text-sm text-slate-400"
                   style={{ height: '120px', backgroundColor: '#f8fafc' }}
@@ -737,7 +985,9 @@ export default function PatientDetail() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {Object.entries(sensorGroups).map(([type, g]) => (
+                  {Object.entries(sensorGroups)
+                    .filter(([type]) => /puls|ritm/i.test(type))
+                    .map(([type, g]) => (
                     <div key={type}>
                       <div className="text-sm font-semibold text-slate-600 mb-1">
                         {type}{g.unit ? ` (${g.unit})` : ''}
@@ -791,7 +1041,7 @@ export default function PatientDetail() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100">
-                      {['Tip', 'Data', 'Medic', 'Status'].map(h => (
+                      {['Tip', 'Data', 'Medic', 'Stare'].map(h => (
                         <th key={h} className="pb-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
                           {h}
                         </th>
@@ -1062,7 +1312,7 @@ export default function PatientDetail() {
                             {isOut && (
                               <button onClick={() => handleExportHL7(m)}
                                 className="text-xs font-medium text-amber-700 hover:underline flex items-center gap-1 cursor-pointer">
-                                <Download size={12} /> Export HL7
+                                <Download size={12} /> Exportă HL7
                               </button>
                             )}
                             {canEdit && isOut && (
@@ -1120,6 +1370,7 @@ export default function PatientDetail() {
           {(() => {
             const isOut = (viewMessage?.direction || '').toUpperCase() === 'OUT'
             const parsed = parseHL7Display(viewMessage?.content)
+            const externalJson = extractExternalJson(viewMessage?.content)
             return (
               <>
                 {/* Direction + transfer date banner */}
@@ -1190,7 +1441,7 @@ export default function PatientDetail() {
                           <dl className="grid grid-cols-1 gap-y-1.5 text-sm">
                             {parsed.referral.specialty && (<div className="flex justify-between gap-4"><dt className="text-slate-400">Specialitate</dt><dd className="text-slate-700 text-right">{parsed.referral.specialty}</dd></div>)}
                             {parsed.referral.reason && (<div className="flex justify-between gap-4"><dt className="text-slate-400">Motiv</dt><dd className="text-slate-700 text-right">{parsed.referral.reason}</dd></div>)}
-                            {parsed.referral.status && (<div className="flex justify-between gap-4"><dt className="text-slate-400">Status</dt><dd className="text-slate-700 text-right">{parsed.referral.status}</dd></div>)}
+                            {parsed.referral.status && (<div className="flex justify-between gap-4"><dt className="text-slate-400">Stare</dt><dd className="text-slate-700 text-right">{parsed.referral.status}</dd></div>)}
                           </dl>
                         </div>
                       )}
@@ -1206,6 +1457,15 @@ export default function PatientDetail() {
                       )}
                     </div>
                   )
+                ) : externalJson ? (
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+                      <FileText size={13} /> Mesaj FHIR (JSON) de la clinica externă
+                    </div>
+                    <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap text-slate-700">
+{externalJson}
+                    </pre>
+                  </div>
                 ) : (
                   <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap text-slate-700">
 {viewMessage?.content || ''}
@@ -1218,16 +1478,18 @@ export default function PatientDetail() {
                     <Send size={13} /> Trimite la altă clinică
                   </div>
                   <p className="text-xs text-slate-400 mb-2">
-                    URL-ul de recepție al clinicii (ex. https://abc123.ngrok-free.app/api/hl7messages/receive)
+                    Selectează clinica destinatară
                   </p>
                   <div className="flex gap-2">
-                    <input
-                      type="url"
-                      placeholder="https://...ngrok-free.app/api/hl7messages/receive"
-                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none"
+                    <select
+                      className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 outline-none"
                       value={sendTarget}
                       onChange={e => setSendTarget(e.target.value)}
-                    />
+                    >
+                      {EXTERNAL_CLINICS.map(c => (
+                        <option key={c.url} value={c.url}>{c.name}</option>
+                      ))}
+                    </select>
                     <Button onClick={handleSendExternal} disabled={sending || !sendTarget.trim()}>
                       <Send size={14} /> {sending ? 'Se trimite…' : 'Trimite'}
                     </Button>
@@ -1250,9 +1512,12 @@ export default function PatientDetail() {
           )}
           {(viewMessage?.direction || '').toUpperCase() === 'OUT' && (
             <Button variant="ghost" onClick={() => handleExportHL7(viewMessage)}>
-              <Download size={14} /> Export HL7
+              <Download size={14} /> Exportă HL7
             </Button>
           )}
+          <Button variant="ghost" onClick={() => handleDownloadPdf(viewMessage)}>
+            <Download size={14} /> Descarcă PDF
+          </Button>
           <Button variant="ghost" onClick={() => { setViewMessage(null); setShowRawHL7(false); setSendResult(null) }}>Închide</Button>
         </DialogFooter>
       </Dialog>

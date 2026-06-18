@@ -1,4 +1,14 @@
 
+// Derive sex from a Romanian CNP: the first digit encodes both century and sex —
+// odd (1,3,5,7,9) = male, even (2,4,6,8) = female.
+const extractGenderFromCNP = (cnp) => {
+  if (!cnp || cnp.length !== 13) return ''
+  const s = cnp[0]
+  if ('13579'.includes(s)) return 'Masculin'
+  if ('2468'.includes(s)) return 'Feminin'
+  return ''
+}
+
 // Extract age from Romanian CNP
 const extractAgeFromCNP = (cnp) => {
   if (!cnp || cnp.length !== 13) return null
@@ -57,7 +67,7 @@ const extractAgeFromCNP = (cnp) => {
 export const mapPatientFromAPI = (apiPatient, index = 0) => {
   const firstName = apiPatient.firstName || ''
   const lastName = apiPatient.lastName || ''
-  const name = [firstName, lastName].filter(Boolean).join(' ') || `Patient ${apiPatient.patientId}`
+  const name = [firstName, lastName].filter(Boolean).join(' ') || `Pacient ${apiPatient.patientId}`
 
   return {
     id: `p${apiPatient.patientId}`,
@@ -67,6 +77,7 @@ export const mapPatientFromAPI = (apiPatient, index = 0) => {
     lastName,
     cnp: apiPatient.cnp || '',
     age: extractAgeFromCNP(apiPatient.cnp),
+    gender: extractGenderFromCNP(apiPatient.cnp),
     phone: apiPatient.phone || '',
     email: apiPatient.email || '',
     street: apiPatient.street || '',
@@ -84,11 +95,23 @@ export const mapPatientFromAPI = (apiPatient, index = 0) => {
     diagnoses: [],
     allergies: [],
     risk: 'Medium',
-    vitals: { hr: 75, bp: '120/80', spo2: 97, temp: 36.8 },
     sensors: [],
     status: 'Admitted',
   }
 }
+
+// Map API ManualMeasurement response (Masuratori_Manuale) to frontend format.
+export const mapManualMeasurementFromAPI = (apiManual) => ({
+  measurementId: apiManual.measurementId,
+  patientId: apiManual.patientId,
+  systolic: apiManual.tensiuneSistolica != null ? Number(apiManual.tensiuneSistolica) : null,
+  diastolic: apiManual.tensiuneDiastolica != null ? Number(apiManual.tensiuneDiastolica) : null,
+  glucose: apiManual.glicemie != null ? Number(apiManual.glicemie) : null,
+  weight: apiManual.greutate != null ? Number(apiManual.greutate) : null,
+  temperature: apiManual.temperatura != null ? Number(apiManual.temperatura) : null,
+  recordedAt: apiManual.recordedAt || null,
+  notes: apiManual.observatii || '',
+})
 
 export const mapPatientToAPI = (patient) => ({
   userId: patient.userId || null,
@@ -111,20 +134,20 @@ export const mapAlarmFromAPI = (apiAlarm) => {
     MEDIUM: 'Medium',
     LOW: 'Low',
   }
-  const patientName = [apiAlarm.patientFirstName, apiAlarm.patientLastName].filter(Boolean).join(' ') || 'Unknown Patient'
+  const patientName = [apiAlarm.patientFirstName, apiAlarm.patientLastName].filter(Boolean).join(' ') || 'Pacient necunoscut'
 
   return {
     id: `a${apiAlarm.alarmId}`,
     alarmId: apiAlarm.alarmId,
     patientId: apiAlarm.patientId || '',
     patientName,
-    sensor: apiAlarm.sensorName || 'Unknown Sensor',
-    type: apiAlarm.alarmType || 'Unknown',
+    sensor: apiAlarm.sensorName || 'Senzor necunoscut',
+    type: apiAlarm.alarmType || 'Necunoscut',
     severity: severityMap[apiAlarm.alarmType?.toUpperCase()] || 'High',
     value: apiAlarm.measurementValue !== undefined ? apiAlarm.measurementValue : '',
     timestamp: apiAlarm.triggerDate || new Date().toISOString(),
     status: apiAlarm.isResolved ? 'Resolved' : 'Active',
-    message: apiAlarm.message || 'No message',
+    message: apiAlarm.message || 'Fără mesaj',
     resolutionDate: apiAlarm.resolutionDate || null,
     resolutionNotes: apiAlarm.resolutionNotes || '',
     supervisorId: apiAlarm.supervisorId ?? null,
@@ -144,21 +167,22 @@ export const mapAlarmToAPI = (alarm) => ({
 
 // Map API Consultation response to frontend format
 export const mapConsultationFromAPI = (apiConsultation) => {
-  const patientName = [apiConsultation.firstName, apiConsultation.lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+  const patientName = [apiConsultation.firstName, apiConsultation.lastName].filter(Boolean).join(' ') || 'Pacient necunoscut'
 
   return {
     id: `c${apiConsultation.consultationId}`,
     consultationId: apiConsultation.consultationId,
     patientId: apiConsultation.patientId || '',
     patientName,
-    type: apiConsultation.presentationReason || 'Medical Consultation',
+    type: apiConsultation.presentationReason || 'Consultație medicală',
     date: apiConsultation.consultationDate?.split('T')[0] || new Date().toISOString().split('T')[0],
     time: apiConsultation.consultationDate?.split('T')[1]?.slice(0, 5) || '09:00',
     mode: 'In-Person',
     priority: 'Routine',
-    physician: apiConsultation.doctorName || 'Unknown',
+    physician: apiConsultation.doctorName || 'Necunoscut',
     doctorName: apiConsultation.doctorName || '',
-    status: 'Scheduled',
+    // Consultatii has no status column; consultations are always shown as finalized.
+    status: 'Finalizata',
     presentationReason: apiConsultation.presentationReason || '',
     symptoms: apiConsultation.symptoms || '',
     diagnosisCode: apiConsultation.diagnosisCode || apiConsultation.Diagnostic_Cod_ICD9 || '',
@@ -257,6 +281,24 @@ export const groupMeasurementsBySensor = (measurements = []) => {
   return groups
 }
 
+// Merge a small batch of freshly-polled measurements into already-loaded sensor
+// groups, so periodic refreshes only append new points instead of re-fetching the
+// whole window. Points are deduped by timestamp; anything older than minTs (the
+// rolling window's lower bound) is dropped so the chart doesn't grow unbounded.
+export const mergeSensorGroups = (prev = {}, incoming = [], minTs = null) => {
+  const next = { ...prev }
+  const fresh = groupMeasurementsBySensor(incoming)
+  for (const [type, g] of Object.entries(fresh)) {
+    const base = next[type] ?? { ...g, data: [] }
+    const byTs = new Map(base.data.map(d => [d.ts, d]))
+    for (const d of g.data) byTs.set(d.ts, d)
+    let data = [...byTs.values()].sort((a, b) => a.ts - b.ts)
+    if (minTs != null) data = data.filter(d => d.ts >= minTs)
+    next[type] = { ...base, thresholds: g.thresholds, unit: g.unit, data }
+  }
+  return next
+}
+
 // Map API SensorConfig response to frontend format
 export const mapSensorConfigFromAPI = (apiConfig) => {
   return {
@@ -264,8 +306,8 @@ export const mapSensorConfigFromAPI = (apiConfig) => {
     sensorId: apiConfig.sensorId,
     deviceId: apiConfig.deviceId,
     patientId: apiConfig.patientId,
-    name: apiConfig.name || apiConfig.sensorType || 'Unknown',
-    type: apiConfig.sensorType || 'Unknown',
+    name: apiConfig.name || apiConfig.sensorType || 'Necunoscut',
+    type: apiConfig.sensorType || 'Necunoscut',
     status: apiConfig.active ? 'Online' : 'Offline',
     sensorType: apiConfig.sensorType || '',
     measurementUnit: apiConfig.measurementUnit || '',
@@ -279,11 +321,14 @@ export const mapSensorConfigFromAPI = (apiConfig) => {
     thresholdMin: apiConfig.lowerAlarmThreshold || 0,
     thresholdMax: apiConfig.upperAlarmThreshold || 100,
     active: apiConfig.active,
-    patientName: apiConfig.patientName || 'Unknown',
+    patientName: apiConfig.patientName || 'Necunoscut',
     room: '---',
     location: `Device ${apiConfig.deviceId}`,
-    model: apiConfig.sensorType || 'Unknown Sensor',
-    lastValue: '---',
+    model: apiConfig.sensorType || 'Senzor necunoscut',
+    lastValue: apiConfig.lastValue != null
+      ? `${Number(apiConfig.lastValue)}${apiConfig.measurementUnit ? ` ${apiConfig.measurementUnit}` : ''}`
+      : '---',
+    lastReadingDateTime: apiConfig.lastReadingDateTime || null,
     unit: apiConfig.measurementUnit || '',
     orderNumber: apiConfig.orderNumber,
     persistenceSeconds: apiConfig.persistenceSeconds ?? null,
@@ -309,14 +354,14 @@ export const mapSensorConfigToAPI = (config) => ({
 
 // Map API Recommendation response to frontend format
 export const mapRecommendationFromAPI = (apiRec) => {
-  const patientName = [apiRec.firstName, apiRec.lastName].filter(Boolean).join(' ') || 'Unknown Patient'
+  const patientName = [apiRec.firstName, apiRec.lastName].filter(Boolean).join(' ') || 'Pacient necunoscut'
 
   return {
     id: `r${apiRec.recommendationId}`,
     recommendationId: apiRec.recommendationId,
     patientId: `p${apiRec.patientId}` || '',
     patientName,
-    type: apiRec.activityType || 'Activity',
+    type: apiRec.activityType || 'Activitate',
     duration: apiRec.dailyDurationMinutes || 30,
     startDate: apiRec.startDate || new Date().toISOString().split('T')[0],
     endDate: apiRec.stopDate || new Date().toISOString().split('T')[0],

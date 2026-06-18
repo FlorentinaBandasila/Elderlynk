@@ -366,9 +366,11 @@ namespace Elderlynk.Services
         // ===== Activity (audit log scoped to a patient) =====
         public async Task<IEnumerable<AuditLogResponseDto>> GetActivityAsync(int patientId, CancellationToken cancellationToken = default)
         {
+            // Authentication events (LOGIN/LOGOUT) are account-level, not patient care
+            // activity, so they are excluded from a patient's activity feed.
             var logs = await _context.Set<AuditLog>()
                 .AsNoTracking()
-                .Where(l => l.PatientId == patientId)
+                .Where(l => l.PatientId == patientId && l.Action != "LOGIN" && l.Action != "LOGOUT")
                 .OrderByDescending(l => l.LogDateTime)
                 .Take(50)
                 .ToListAsync(cancellationToken);
@@ -453,7 +455,7 @@ namespace Elderlynk.Services
         }
 
         public async Task<IEnumerable<PatientMeasurementDto>> GetMeasurementsAsync(
-            int patientId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
+            int patientId, DateTimeOffset? from, DateTimeOffset? to, int? limit = null, CancellationToken cancellationToken = default)
         {
             // Resolve the patient's sensors: Device(ID_Pacient) -> SensorConfig(ID_Dispozitiv).
             var sensors = await (
@@ -475,9 +477,23 @@ namespace Elderlynk.Services
             if (from.HasValue) query = query.Where(m => m.MeasurementDateTime >= from.Value);
             if (to.HasValue) query = query.Where(m => m.MeasurementDateTime <= to.Value);
 
-            var measurements = await query
-                .OrderBy(m => m.MeasurementDateTime)
-                .ToListAsync(cancellationToken);
+            List<SensorMeasurement> measurements;
+            if (limit.HasValue && limit.Value > 0)
+            {
+                // Polling path: fetch only the most recent N rows (descending), then
+                // flip to ascending so the client can append them to the chart.
+                measurements = await query
+                    .OrderByDescending(m => m.MeasurementDateTime)
+                    .Take(limit.Value)
+                    .ToListAsync(cancellationToken);
+                measurements.Reverse();
+            }
+            else
+            {
+                measurements = await query
+                    .OrderBy(m => m.MeasurementDateTime)
+                    .ToListAsync(cancellationToken);
+            }
 
             return measurements.Select(m =>
             {
@@ -496,6 +512,28 @@ namespace Elderlynk.Services
                     UpperAlarmThreshold = s?.UpperAlarmThreshold,
                 };
             });
+        }
+
+        public async Task<IEnumerable<ManualMeasurementResponseDto>> GetManualMeasurementsAsync(
+            int patientId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Set<ManualMeasurement>().AsNoTracking()
+                .Where(m => m.PatientId == patientId)
+                .OrderByDescending(m => m.RecordedAt)
+                .Select(m => new ManualMeasurementResponseDto
+                {
+                    MeasurementId = m.MeasurementId,
+                    PatientId = m.PatientId,
+                    SourceUserId = m.SourceUserId,
+                    TensiuneSistolica = m.TensiuneSistolica,
+                    TensiuneDiastolica = m.TensiuneDiastolica,
+                    Glicemie = m.Glicemie,
+                    Greutate = m.Greutate,
+                    Temperatura = m.Temperatura,
+                    RecordedAt = m.RecordedAt,
+                    Observatii = m.Observatii
+                })
+                .ToListAsync(cancellationToken);
         }
 
         private static PatientResponseDto Map(Patient p) => new()

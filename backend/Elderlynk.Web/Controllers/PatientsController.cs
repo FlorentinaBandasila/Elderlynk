@@ -226,7 +226,7 @@ namespace Elderlynk.Web.Controllers
 
         [HttpGet("{id}/measurements")]
         public async Task<ActionResult<IEnumerable<PatientMeasurementDto>>> GetMeasurements(
-            int id, [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, CancellationToken cancellationToken)
+            int id, [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to, [FromQuery] int? limit, CancellationToken cancellationToken)
         {
             try
             {
@@ -234,11 +234,27 @@ namespace Elderlynk.Web.Controllers
                 if (User.GetRole() == RolePatient && User.GetUserId() != id)
                     return Forbid();
 
-                return Ok(await _service.GetMeasurementsAsync(id, from, to, cancellationToken));
+                return Ok(await _service.GetMeasurementsAsync(id, from, to, limit, cancellationToken));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving measurements for patient {Id}", id);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        [HttpGet("{id}/manual-measurements")]
+        public async Task<ActionResult<IEnumerable<ManualMeasurementResponseDto>>> GetManualMeasurements(
+            int id, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (PatientAccessingOther(id)) return Forbid();
+                return Ok(await _service.GetManualMeasurementsAsync(id, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving manual measurements for patient {Id}", id);
                 return StatusCode(500, "Internal server error");
             }
         }

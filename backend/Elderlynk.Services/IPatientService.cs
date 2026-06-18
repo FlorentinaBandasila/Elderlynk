@@ -45,6 +45,12 @@ namespace Elderlynk.Services
         /// Returns sensor readings for a patient (joined sensor → device → patient),
         /// enriched with sensor metadata/thresholds for graphing. Optionally filtered by date.
         /// </summary>
-        Task<IEnumerable<PatientMeasurementDto>> GetMeasurementsAsync(int patientId, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default);
+        Task<IEnumerable<PatientMeasurementDto>> GetMeasurementsAsync(int patientId, DateTimeOffset? from, DateTimeOffset? to, int? limit = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Returns the patient's manually recorded vitals (blood pressure, glucose,
+        /// weight, temperature), most recent first.
+        /// </summary>
+        Task<IEnumerable<ManualMeasurementResponseDto>> GetManualMeasurementsAsync(int patientId, CancellationToken cancellationToken = default);
     }
 }

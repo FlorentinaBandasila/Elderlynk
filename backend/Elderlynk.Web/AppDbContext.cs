@@ -16,6 +16,7 @@ namespace Elderlynk.Web
         public DbSet<Device> Devices { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<SensorMeasurement> SensorMeasurements { get; set; }
+        public DbSet<ManualMeasurement> ManualMeasurements { get; set; }
         public DbSet<HL7Message> HL7Messages { get; set; }
         public DbSet<Recommendation> Recommendations { get; set; }
         public DbSet<MedicalRecommendation> MedicalRecommendations { get; set; }
