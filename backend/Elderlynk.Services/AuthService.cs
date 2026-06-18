@@ -15,7 +15,7 @@ namespace Elderlynk.Services
             _context = context;
         }
 
-        public async Task<AuthPrincipal?> AuthenticateAsync(string email, string parola, CancellationToken cancellationToken = default)
+        public async Task<AuthPrincipal?> AuthenticateAsync(string email, string parola, string? sourceIp = null, CancellationToken cancellationToken = default)
         {
             // 1) Staff accounts (Utilizatori) take precedence.
             var user = await _context.Set<User>()
@@ -26,7 +26,7 @@ namespace Elderlynk.Services
             {
                 if ((user.Active ?? true) && Verify(parola, user.PasswordHash))
                 {
-                    return new AuthPrincipal
+                    var principal = new AuthPrincipal
                     {
                         UserId = user.UserId,
                         Email = user.Email,
@@ -34,6 +34,8 @@ namespace Elderlynk.Services
                         Roles = RolesOf(user),
                         UserType = "user"
                     };
+                    await LogAuthEventAsync(principal, "LOGIN", sourceIp, cancellationToken);
+                    return principal;
                 }
                 return null;
             }
@@ -46,7 +48,7 @@ namespace Elderlynk.Services
             if (patient != null && patient.Active && !string.IsNullOrEmpty(patient.PasswordHash)
                 && Verify(parola, patient.PasswordHash!))
             {
-                return new AuthPrincipal
+                var principal = new AuthPrincipal
                 {
                     UserId = patient.PatientId,
                     Email = patient.Email!,
@@ -54,9 +56,58 @@ namespace Elderlynk.Services
                     Roles = new[] { PatientRoleId },
                     UserType = "patient"
                 };
+                await LogAuthEventAsync(principal, "LOGIN", sourceIp, cancellationToken);
+                return principal;
             }
 
             return null;
+        }
+
+        public async Task LogoutAsync(int userId, string userType, string? sourceIp, CancellationToken cancellationToken = default)
+        {
+            var isPatient = userType == "patient";
+
+            // The token only carries the id, so resolve the name for the audit detail.
+            var name = isPatient
+                ? await _context.Set<Patient>().AsNoTracking()
+                    .Where(p => p.PatientId == userId)
+                    .Select(p => (p.FirstName ?? "") + " " + (p.LastName ?? ""))
+                    .FirstOrDefaultAsync(cancellationToken)
+                : await _context.Set<User>().AsNoTracking()
+                    .Where(u => u.UserId == userId)
+                    .Select(u => (u.FirstName ?? "") + " " + (u.LastName ?? ""))
+                    .FirstOrDefaultAsync(cancellationToken);
+
+            AuditHelper.Add(_context,
+                userId: isPatient ? null : userId,
+                action: "LOGOUT",
+                affectedTable: isPatient ? "Pacienti" : "Utilizatori",
+                sourceIp: sourceIp,
+                patientId: isPatient ? userId : null,
+                details: AuthDetails(userType, userId, name?.Trim()));
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        /// <summary>Writes a LOGIN/LOGOUT row to Log_Audit, scoping it to the right account table.</summary>
+        private async Task LogAuthEventAsync(AuthPrincipal principal, string action, string? sourceIp, CancellationToken cancellationToken)
+        {
+            var isPatient = principal.UserType == "patient";
+            AuditHelper.Add(_context,
+                userId: isPatient ? null : principal.UserId,
+                action: action,
+                affectedTable: isPatient ? "Pacienti" : "Utilizatori",
+                sourceIp: sourceIp,
+                patientId: isPatient ? principal.UserId : null,
+                details: AuthDetails(principal.UserType, principal.UserId, principal.Nume));
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        /// <summary>Builds the Log_Audit "Detalii" text, e.g. "Pacient Ion Popescu (ID: 22)".</summary>
+        private static string AuthDetails(string userType, int id, string? name)
+        {
+            var label = userType == "patient" ? "Pacient" : "Utilizator";
+            var who = string.IsNullOrWhiteSpace(name) ? label : $"{label} {name}";
+            return $"{who} (ID: {id})";
         }
 
         public async Task<AuthPrincipal> RegisterUserAsync(RegisterUserDto dto, int? actingUserId, string? sourceIp, CancellationToken cancellationToken = default)

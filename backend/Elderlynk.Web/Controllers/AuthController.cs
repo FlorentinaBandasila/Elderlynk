@@ -31,7 +31,7 @@ namespace Elderlynk.Web.Controllers
 
             try
             {
-                var principal = await _auth.AuthenticateAsync(dto.Email, dto.Parola, cancellationToken);
+                var principal = await _auth.AuthenticateAsync(dto.Email, dto.Parola, GetSourceIp(), cancellationToken);
                 if (principal == null)
                     return Unauthorized(new { message = "Email sau parolă incorecte." });
 
@@ -116,6 +116,24 @@ namespace Elderlynk.Web.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error resetting password for {UserType} {UserId}", dto.UserType, dto.UserId);
+                return StatusCode(500, "Internal server error");
+            }
+        }
+
+        /// <summary>Records a LOGOUT audit event for the current token holder. The JWT itself is
+        /// stateless, so the client is responsible for discarding it after calling this.</summary>
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _auth.LogoutAsync(User.GetUserId(), User.GetUserType(), GetSourceIp(), cancellationToken);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during logout");
                 return StatusCode(500, "Internal server error");
             }
         }

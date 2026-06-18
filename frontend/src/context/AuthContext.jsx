@@ -93,6 +93,13 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback((opts) => {
+    // Record the logout server-side (Criteriul 26) while the token is still valid.
+    // Fire-and-forget so the UI logs out instantly; skip when the token is already
+    // expired, since the call would 401 and force a redirect.
+    const token = getToken()
+    if (token && !isExpired(token)) {
+      authAPI.logout().catch(() => {})
+    }
     // Mark the session as expired (vs. a manual "Deconectare") so Login can explain why.
     if (opts?.expired) sessionStorage.setItem(SESSION_EXPIRED_KEY, '1')
     clearToken()

@@ -4,8 +4,14 @@ namespace Elderlynk.Services
 {
     public interface IAuthService
     {
-        /// <summary>Checks Utilizatori first, then Pacienti. Returns null when credentials are invalid.</summary>
-        Task<AuthPrincipal?> AuthenticateAsync(string email, string parola, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Checks Utilizatori first, then Pacienti. Returns null when credentials are invalid.
+        /// On success records a LOGIN event in Log_Audit.
+        /// </summary>
+        Task<AuthPrincipal?> AuthenticateAsync(string email, string parola, string? sourceIp = null, CancellationToken cancellationToken = default);
+
+        /// <summary>Records a LOGOUT event in Log_Audit for the given account.</summary>
+        Task LogoutAsync(int userId, string userType, string? sourceIp, CancellationToken cancellationToken = default);
 
         /// <summary>Creates a staff account (Utilizatori) and assigns the requested role.</summary>
         Task<AuthPrincipal> RegisterUserAsync(RegisterUserDto dto, int? actingUserId, string? sourceIp, CancellationToken cancellationToken = default);
